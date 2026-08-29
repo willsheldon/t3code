@@ -24,6 +24,7 @@ import {
   type OrchestrationV2Subagent,
   type OrchestrationV2ThreadProjection,
   type OrchestrationV2TurnItem,
+  type ProjectId,
   ProviderInstanceId,
   type ProviderSessionId,
   RunId,
@@ -171,12 +172,26 @@ export interface OrchestratorV2DispatchResult {
   readonly storedEvents: ReadonlyArray<OrchestrationV2StoredEvent>;
 }
 
+export type OrchestratorV2CreatedThreadRecordCommand = Extract<
+  OrchestrationV2Command,
+  { readonly type: "thread.created.record" }
+>;
+
+export interface OrchestratorV2ServerCreatedThreadRecordInput {
+  readonly command: OrchestratorV2CreatedThreadRecordCommand;
+  readonly targetProjectId: ProjectId;
+}
+
 export interface OrchestratorV2Shape {
   readonly resumeQueuedRuns: Effect.Effect<number, OrchestratorV2Error>;
   readonly dispatch: (
     command: OrchestrationV2Command,
   ) => Effect.Effect<OrchestratorV2DispatchResult, OrchestratorV2Error>;
   readonly getCommandReceipt: CommandReceiptStoreV2["Service"]["getByCommandId"];
+  /** Records a cross-project MCP launch through a server-owned authorization boundary. */
+  readonly recordServerCreatedThread: (
+    input: OrchestratorV2ServerCreatedThreadRecordInput,
+  ) => Effect.Effect<OrchestratorV2DispatchResult, OrchestratorV2Error>;
   readonly getThreadProjection: (
     threadId: ThreadId,
   ) => Effect.Effect<OrchestrationV2ThreadProjection, OrchestratorV2Error>;
@@ -4885,8 +4900,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
 
   const dispatchCreatedThreadRecord = Effect.fn("orchestrationV2.dispatch.createdThreadRecord")(
     function* (
-      command: Extract<OrchestrationV2Command, { readonly type: "thread.created.record" }>,
+      command: OrchestratorV2CreatedThreadRecordCommand,
       events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+      authorizedTargetProjectId: ProjectId | undefined,
     ) {
       const parentProjection = yield* projectionStore
         .getThreadProjection(command.parentThreadId)
@@ -4928,11 +4944,24 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           cause: `Parent node ${command.parentNodeId} is not the root of run ${command.parentRunId}.`,
         });
       }
-      if (parentProjection.thread.projectId !== targetProjection.thread.projectId) {
+      if (
+        authorizedTargetProjectId === undefined &&
+        parentProjection.thread.projectId !== targetProjection.thread.projectId
+      ) {
         return yield* new OrchestratorDispatchError({
           commandId: command.commandId,
           commandType: command.type,
           cause: `Target thread ${command.targetThreadId} belongs to another project.`,
+        });
+      }
+      if (
+        authorizedTargetProjectId !== undefined &&
+        authorizedTargetProjectId !== targetProjection.thread.projectId
+      ) {
+        return yield* new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause: `Target thread ${command.targetThreadId} does not belong to authorized project ${authorizedTargetProjectId}.`,
         });
       }
       if (
@@ -4965,6 +4994,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         updatedAt: now,
         type: "thread_created",
         targetThreadId: command.targetThreadId,
+        targetProjectId: targetProjection.thread.projectId,
         targetRunId: command.targetRunId,
         targetProviderInstanceId: targetProjection.thread.modelSelection.instanceId,
         targetModel: targetProjection.thread.modelSelection.model,
@@ -6766,6 +6796,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
 
   const dispatchOnce = Effect.fn("orchestrationV2.dispatch.once")(function* (
     command: OrchestrationV2Command,
+    options?: { readonly authorizedCreatedThreadProjectId?: ProjectId },
   ): Effect.fn.Return<
     {
       readonly events: ReadonlyArray<OrchestrationV2DomainEvent>;
@@ -6868,7 +6899,11 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         yield* dispatchDelegatedTaskCompletionDeliveryResolution(command, events);
         break;
       case "thread.created.record":
-        yield* dispatchCreatedThreadRecord(command, events);
+        yield* dispatchCreatedThreadRecord(
+          command,
+          events,
+          options?.authorizedCreatedThreadProjectId,
+        );
         break;
       default:
         return yield* dispatchUnsupported(command);
@@ -6882,6 +6917,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
 
   const dispatchWithReceiptEffect = Effect.fn("orchestrationV2.dispatch.withReceipt")(function* (
     command: OrchestrationV2Command,
+    options?: { readonly authorizedCreatedThreadProjectId?: ProjectId },
   ): Effect.fn.Return<OrchestratorV2DispatchResult, OrchestratorV2Error> {
     yield* Effect.annotateCurrentSpan({
       "orchestration_v2.command_id": command.commandId,
@@ -6939,7 +6975,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       } satisfies OrchestratorV2DispatchResult;
     }
 
-    const plan = yield* dispatchOnce(command).pipe(
+    const plan = yield* dispatchOnce(command, options).pipe(
       Effect.flatMap((planned) =>
         planned.events.length > 0
           ? Effect.succeed(planned)
@@ -7020,6 +7056,14 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
 
   const dispatchWithReceipt = (command: OrchestrationV2Command) =>
     threadDispatch.withLock(commandThreadId(command), dispatchWithReceiptEffect(command));
+
+  const recordServerCreatedThread = (input: OrchestratorV2ServerCreatedThreadRecordInput) =>
+    threadDispatch.withLock(
+      commandThreadId(input.command),
+      dispatchWithReceiptEffect(input.command, {
+        authorizedCreatedThreadProjectId: input.targetProjectId,
+      }),
+    );
 
   const handleTerminalRun = (stored: OrchestrationV2StoredEvent) =>
     Effect.gen(function* () {
@@ -7176,6 +7220,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     resumeQueuedRuns,
     dispatch: dispatchWithReceipt,
     getCommandReceipt: commandReceipts.getByCommandId,
+    recordServerCreatedThread,
     getThreadProjection: (threadId) =>
       projectionStore
         .getThreadProjection(threadId)
@@ -7279,6 +7324,14 @@ export const layerUnavailable: Layer.Layer<OrchestratorV2> = Layer.succeed(
         }),
       ),
     getCommandReceipt: () => Effect.die("Orchestration V2 live runtime is not configured."),
+    recordServerCreatedThread: ({ command }) =>
+      Effect.fail(
+        new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause: "Orchestration V2 live runtime is not configured.",
+        }),
+      ),
     getThreadProjection: (threadId) =>
       Effect.fail(
         new OrchestratorProjectionError({
