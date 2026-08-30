@@ -44,7 +44,11 @@ import { CommandPolicyV2 } from "./CommandPolicy.ts";
 import { CommandReceiptStoreV2 } from "./CommandReceiptStore.ts";
 import { ContextHandoffServiceV2 } from "./ContextHandoffService.ts";
 import { EventSinkV2 } from "./EventSink.ts";
-import type { OrchestrationEffectRequestV2, PendingOrchestrationEffectV2 } from "./EffectOutbox.ts";
+import {
+  EffectOutboxV2,
+  type OrchestrationEffectRequestV2,
+  type PendingOrchestrationEffectV2,
+} from "./EffectOutbox.ts";
 import { IdAllocatorV2 } from "./IdAllocator.ts";
 import { makeKeyedSerialExecutor } from "./KeyedSerialExecutor.ts";
 import {
@@ -207,6 +211,8 @@ export interface OrchestratorV2Shape {
   readonly getThreadEventSequence: (
     threadId: ThreadId,
   ) => Effect.Effect<number, OrchestratorV2Error>;
+  readonly getCommandReceipt: CommandReceiptStoreV2["Service"]["getByCommandId"];
+  readonly listCommandEffects: EffectOutboxV2["Service"]["listByCommandId"];
   readonly streamStoredEvents: Stream.Stream<OrchestrationV2StoredEvent, OrchestratorV2Error>;
   readonly streamStoredEventsFrom: (input?: {
     readonly threadId?: ThreadId;
@@ -524,6 +530,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
   const contextHandoffService = yield* ContextHandoffServiceV2;
   const eventSink = yield* EventSinkV2;
   const commandReceipts = yield* CommandReceiptStoreV2;
+  const effectOutbox = yield* EffectOutboxV2;
   const idAllocator = yield* IdAllocatorV2;
   const projectionStore = yield* ProjectionStoreV2;
   const providerAdapters = yield* ProviderAdapterRegistryV2;
@@ -6013,6 +6020,18 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
   ) =>
     Effect.gen(function* () {
       const projection = yield* loadProjectionForCommand(command);
+      if (
+        command.expectedIdle === true &&
+        projection.runs.some((run) =>
+          ["preparing", "queued", "starting", "running", "waiting"].includes(run.status),
+        )
+      ) {
+        return yield* new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause: "Checkpoint rollback requires an idle thread with no queued runs.",
+        });
+      }
       const providerThread = projection.providerThreads.find(
         (candidate) => candidate.id === projection.thread.activeProviderThreadId,
       );
@@ -6126,6 +6145,10 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             providerThreadId: providerThread.id,
             checkpointId: targetCheckpoint.id,
             scopeId: targetScope.id,
+            ...(command.expectedIdle === undefined ? {} : { expectedIdle: command.expectedIdle }),
+            ...(command.expectedWorkspaceFingerprint === undefined
+              ? {}
+              : { expectedWorkspaceFingerprint: command.expectedWorkspaceFingerprint }),
           },
         } satisfies PendingOrchestrationEffectV2,
       ]);
@@ -7190,6 +7213,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       eventSink
         .latestSequence({ threadId })
         .pipe(Effect.mapError((cause) => new OrchestratorProjectionError({ threadId, cause }))),
+    getCommandReceipt: commandReceipts.getByCommandId,
+    listCommandEffects: effectOutbox.listByCommandId,
     streamStoredEvents: eventSink.stream().pipe(
       Stream.mapError(
         (cause) =>
@@ -7235,6 +7260,7 @@ export const layer: Layer.Layer<
   | CommandReceiptStoreV2
   | ContextHandoffServiceV2
   | EventSinkV2
+  | EffectOutboxV2
   | IdAllocatorV2
   | ProviderAdapterRegistryV2
   | ProviderSessionManagerV2
@@ -7304,6 +7330,8 @@ export const layerUnavailable: Layer.Layer<OrchestratorV2> = Layer.succeed(
           cause: "Orchestration V2 live runtime is not configured.",
         }),
       ),
+    getCommandReceipt: () => Effect.succeed(Option.none()),
+    listCommandEffects: () => Effect.succeed([]),
     streamStoredEvents: Stream.fail(
       new OrchestratorDomainEventStreamError({
         cause: "Orchestration V2 live runtime is not configured.",
