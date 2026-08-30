@@ -28,7 +28,7 @@ import {
   RuntimeMode,
 } from "./providerPolicy.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
-import { Project, ProjectScript, ProjectScriptIcon } from "./project.ts";
+import { Project, ProjectFaviconPath, ProjectScript, ProjectScriptIcon } from "./project.ts";
 import { RepositoryIdentity, ThreadEnvMode } from "./environment.ts";
 import { OrchestrationProjectShell } from "./orchestrationProject.ts";
 import {
@@ -62,11 +62,7 @@ export {
 export const CorrelationId = CommandId;
 export type CorrelationId = typeof CorrelationId.Type;
 
-export const ProjectFaviconPath = TrimmedNonEmptyString.check(
-  Schema.isMaxLength(1024),
-  Schema.isPattern(/\.(?:avif|gif|ico|jpe?g|png|svg|webp)$/i),
-);
-export type ProjectFaviconPath = typeof ProjectFaviconPath.Type;
+export { ProjectFaviconPath } from "./project.ts";
 
 export const OrchestrationProject = Schema.Struct({
   id: ProjectId,
