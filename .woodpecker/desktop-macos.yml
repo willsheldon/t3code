@@ -1,0 +1,95 @@
+# Unsigned macOS desktop build for the Autimo fork, run on the nida-m5 agent.
+#
+# Fork-only lane. It never runs for upstream pull requests: persistent local
+# agents execute repository code directly on a real host, so only branches we
+# push ourselves are eligible.
+#
+# Signing is deliberately absent. codesign cannot run as the session-less
+# agent user on macOS 26 (see autimo/pineshot .woodpecker/deploy-macos.yml),
+# and T3's own signed path also needs a provisioning profile issued to the team
+# that owns com.t3tools.t3code, which Autimo cannot mint. Sign the produced
+# .app on a workstation with the Autimo Developer ID when a signed build is
+# needed, the same way Pinemeter releases are signed.
+#
+# One-time provisioning:
+#   1. A Woodpecker agent on nida-m5 advertising:
+#      platform=darwin/arm64, hostname=nida-m5-t3code,
+#      repo=willsheldon/t3code, trust=private-native, purpose=t3code
+#   2. Node 24 (see package.json engines), pnpm 11, and a Rust toolchain with
+#      the aarch64-apple-darwin target on that agent's PATH.
+#   3. Repo secret github_release_token: contents:write on willsheldon/t3code,
+#      used to publish the DMG as a prerelease asset.
+
+when:
+  - event: manual
+  - event: push
+    branch: [main, fix/*, local/*]
+
+labels:
+  repo: willsheldon/t3code
+  platform: darwin/arm64
+  backend: local
+  hostname: nida-m5-t3code
+  trust: private-native
+  purpose: t3code
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git:2.9.2
+    settings:
+      lfs: false
+
+steps:
+  - name: preflight
+    image: /bin/bash
+    commands:
+      - set -euo pipefail
+      - cd "$CI_WORKSPACE"
+      - export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+      - test "$(uname -s)" = Darwin
+      - test "$(uname -m)" = arm64
+      - node --version
+      - pnpm --version
+      - cargo --version
+      - rustup target list --installed | grep -qx aarch64-apple-darwin
+
+  - name: install
+    image: /bin/bash
+    commands:
+      - set -euo pipefail
+      - cd "$CI_WORKSPACE"
+      - export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+      - pnpm install --frozen-lockfile
+
+  - name: build-dmg
+    image: /bin/bash
+    commands:
+      - set -euo pipefail
+      - cd "$CI_WORKSPACE"
+      - export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+      # The build reads repository env defaults; the example file carries no secrets.
+      - cp .env.example .env
+      - base_version="$(node -p "require('./apps/desktop/package.json').version")"
+      - build_version="$base_version-fork.${CI_COMMIT_SHA:0:8}"
+      - node scripts/update-release-package-versions.ts "$build_version"
+      - ./node_modules/.bin/vp run dist:desktop:artifact --platform mac --target dmg --arch arm64 --build-version "$build_version" --verbose
+      - shopt -s nullglob
+      - dmg_files=(release/*.dmg)
+      - test "${#dmg_files[@]}" -eq 1
+      - printf 'built %s\n' "${dmg_files[0]}"
+
+  - name: publish-prerelease
+    image: /bin/bash
+    environment:
+      GITHUB_TOKEN:
+        from_secret: github_release_token
+    commands:
+      - set -euo pipefail
+      - cd "$CI_WORKSPACE"
+      - export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+      - shopt -s nullglob
+      - dmg_files=(release/*.dmg)
+      - test "${#dmg_files[@]}" -eq 1
+      # One rolling prerelease holds the latest fork build.
+      - gh release view desktop-fork --repo "$CI_REPO" >/dev/null 2>&1 || gh release create desktop-fork --repo "$CI_REPO" --prerelease --title "Fork desktop builds" --notes "Unsigned macOS builds from the Autimo fork."
+      - gh release upload desktop-fork --repo "$CI_REPO" --clobber "${dmg_files[0]}"
