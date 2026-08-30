@@ -105,7 +105,7 @@ describe("ConversationTransferMcpService", () => {
     );
   });
 
-  it.effect("rejects missing stable runs and inherited permission escalation before dispatch", () =>
+  it.effect("rejects missing stable runs and inherited transfer escalation before dispatch", () =>
     Effect.gen(function* () {
       const dispatched = yield* Ref.make(0);
       const parent = projection({
@@ -138,6 +138,27 @@ describe("ConversationTransferMcpService", () => {
         ),
       );
       assert.equal(escalation.code, "runtime_mode_escalation_denied");
+
+      const mergeEscalation = yield* Effect.gen(function* () {
+        const service = yield* ConversationTransfer.ConversationTransferMcpService;
+        return yield* service
+          .mergeBack(scope(), {
+            sourceThreadId,
+            sourcePoint: { type: "latest_stable" },
+            clientRequestId: "merge-permission-ceiling",
+          })
+          .pipe(Effect.flip);
+      }).pipe(
+        Effect.provide(
+          testLayer({
+            parent,
+            source,
+            dispatch: () =>
+              Ref.update(dispatched, (count) => count + 1).pipe(Effect.as({} as never)),
+          }),
+        ),
+      );
+      assert.equal(mergeEscalation.code, "runtime_mode_escalation_denied");
 
       const noRun = yield* Effect.gen(function* () {
         const service = yield* ConversationTransfer.ConversationTransferMcpService;
