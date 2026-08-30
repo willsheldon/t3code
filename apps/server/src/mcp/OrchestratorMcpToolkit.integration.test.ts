@@ -537,6 +537,9 @@ describe("orchestrator MCP toolkit", () => {
               readonly release: Deferred.Deferred<void>;
             }
           >();
+          const currentLaunchBranches = yield* Ref.make<ReadonlyMap<string, string | null>>(
+            new Map(),
+          );
           // Offers land after the finalize projection writes, so poll briefly
           // instead of asserting counts immediately.
           const waitForContinuationOffers = (count: number) =>
@@ -732,7 +735,12 @@ describe("orchestrator MCP toolkit", () => {
             Layer.provide(
               Layer.mergeAll(
                 projectLayer,
-                Layer.mock(GitWorkflow.GitWorkflowService)({}),
+                Layer.mock(GitWorkflow.GitWorkflowService)({
+                  currentBranch: (workspaceRoot) =>
+                    Ref.get(currentLaunchBranches).pipe(
+                      Effect.map((branches) => branches.get(workspaceRoot) ?? null),
+                    ),
+                }),
                 Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({
                   runForThread: () => Effect.succeed({ status: "no-script" }),
                 }),
@@ -765,6 +773,7 @@ describe("orchestrator MCP toolkit", () => {
             Layer.provide(ServerSettings.layerTest({})),
             Layer.provide(threadLaunchLayer),
             Layer.provide(vcsDriverRegistryLayer),
+            Layer.provideMerge(vcsProcessLayer),
             Layer.provide(NodeServices.layer),
           );
 
@@ -1855,6 +1864,15 @@ describe("orchestrator MCP toolkit", () => {
               },
             ]);
 
+            const vcsProcess = yield* VcsProcess.VcsProcess;
+            const targetBranch = (yield* vcsProcess.run({
+              operation: "OrchestratorMcpToolkit.integration.currentBranch",
+              command: "git",
+              cwd: targetWorkspace,
+              args: ["symbolic-ref", "--quiet", "--short", "HEAD"],
+              timeoutMs: 10_000,
+            })).stdout.trim();
+            yield* Ref.set(currentLaunchBranches, new Map([[targetWorkspace, targetBranch]]));
             const crossProjectInput = {
               clientRequestId: "create-cross-project-thread-1",
               threads: [
@@ -1864,6 +1882,7 @@ describe("orchestrator MCP toolkit", () => {
                   prompt: "Run in the explicitly selected project.",
                   runtimeMode: "full-access",
                   interactionMode: "default",
+                  workspaceStrategy: { type: "root", branch: targetBranch },
                 },
               ],
             } as const;
@@ -1899,6 +1918,17 @@ describe("orchestrator MCP toolkit", () => {
               targetProjectId,
               targetRunId: crossProjectThread.runId,
             });
+            yield* vcsProcess.run({
+              operation: "OrchestratorMcpToolkit.integration.changeBranch",
+              command: "git",
+              cwd: targetWorkspace,
+              args: ["switch", "-c", "mcp-accepted-replay-branch"],
+              timeoutMs: 10_000,
+            });
+            yield* Ref.set(
+              currentLaunchBranches,
+              new Map([[targetWorkspace, "mcp-accepted-replay-branch"]]),
+            );
             const untrustedCrossProjectRecord = yield* orchestrator
               .dispatch({
                 type: "thread.created.record",
@@ -2029,6 +2059,22 @@ describe("orchestrator MCP toolkit", () => {
             );
             expect(replayedCrossProjectProjection.messages).toHaveLength(1);
             expect(replayedCrossProjectProjection.runs).toHaveLength(1);
+            const freshMismatchedKey = "create-cross-project-thread-fresh-mismatch";
+            const freshMismatchedCall = yield* invoke("create_threads", {
+              ...crossProjectInput,
+              clientRequestId: freshMismatchedKey,
+            });
+            expect(freshMismatchedCall.structuredContent).toMatchObject({
+              code: "orchestration_error",
+            });
+            const freshMismatchedThreadId = ThreadId.make(
+              `thread:mcp:mcp-provider-session-parent:${freshMismatchedKey}:0`,
+            );
+            expect(
+              Option.isNone(
+                yield* Effect.option(orchestrator.getThreadProjection(freshMismatchedThreadId)),
+              ),
+            ).toBe(true);
             yield* orchestrator.dispatch({
               type: "thread.runtime-mode.set",
               commandId: CommandId.make("command:mcp-parent:runtime-restore-after-replay"),
