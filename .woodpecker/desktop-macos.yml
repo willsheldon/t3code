@@ -1,0 +1,126 @@
+# Unsigned macOS desktop build for the Autimo fork, run on the nida-m5 agent.
+#
+# Fork-only lane. It never runs for upstream pull requests: persistent local
+# agents execute repository code directly on a real host, so only branches we
+# push ourselves are eligible.
+#
+# Signing is deliberately absent. codesign cannot run as the session-less
+# agent user on macOS 26 (see autimo/pineshot .woodpecker/deploy-macos.yml),
+# and T3's own signed path also needs a provisioning profile issued to the team
+# that owns com.t3tools.t3code, which Autimo cannot mint. Sign the produced
+# .app on a workstation with the Autimo Developer ID when a signed build is
+# needed, the same way Pinemeter releases are signed.
+#
+# One-time provisioning:
+#   1. A Woodpecker agent on nida-m5 advertising:
+#      platform=darwin/arm64, hostname=nida-m5-t3code,
+#      repo=willsheldon/t3code, trust=public-owner-push
+#   2. Node 24 (see package.json engines), pnpm 11, and a Rust toolchain
+#      with the aarch64-apple-darwin target on the agent's inherited PATH.
+#      Steps do not set PATH, so the agent's launchd environment supplies it.
+#   3. Repo secret github_release_token: contents:write on willsheldon/t3code,
+#      used to publish the DMG as a prerelease asset.
+
+when:
+  - event: manual
+  - event: push
+    branch: [main, fix/*, local/*]
+
+labels:
+  repo: willsheldon/t3code
+  platform: darwin/arm64
+  backend: local
+  hostname: nida-m5-t3code
+  trust: public-owner-push
+
+# The repository carries a gitlink with no .gitmodules entry, which makes the
+# clone plugin's submodule pass fail, so the checkout is done by hand.
+skip_clone: true
+
+steps:
+  - name: clone
+    image: /bin/bash
+    commands:
+      - set -euo pipefail
+      - mkdir -p "$CI_WORKSPACE"
+      - cd "$CI_WORKSPACE"
+      - git init -q .
+      - git config --global --add safe.directory "$CI_WORKSPACE" || true
+      - git remote add origin "$CI_REPO_CLONE_URL" 2>/dev/null || git remote set-url origin "$CI_REPO_CLONE_URL"
+      - git fetch -q --no-tags --depth=1 origin "$CI_COMMIT_SHA"
+      - git reset --hard -q FETCH_HEAD
+      - git log --oneline -1
+
+  - name: preflight
+    image: /bin/bash
+    commands:
+      - set -euo pipefail
+      - cd "$CI_WORKSPACE"
+      - test "$(uname -s)" = Darwin
+      - test "$(uname -m)" = arm64
+      - node --version
+      - pnpm --version
+      - cargo --version
+      - rustup target list --installed | grep -qx aarch64-apple-darwin
+
+  - name: install
+    image: /bin/bash
+    commands:
+      - set -euo pipefail
+      - cd "$CI_WORKSPACE"
+      - pnpm install --frozen-lockfile
+
+  - name: build-dmg
+    image: /bin/bash
+    commands:
+      - set -euo pipefail
+      - cd "$CI_WORKSPACE"
+      # The build reads repository env defaults; the example file carries no secrets.
+      - cp .env.example .env
+      - base_version="$(node -p "require('./apps/desktop/package.json').version")"
+      - short_sha="$(echo "$CI_COMMIT_SHA" | cut -c1-8)"
+      - build_version="$base_version-fork.$short_sha"
+      - node scripts/update-release-package-versions.ts "$build_version"
+      - ./node_modules/.bin/vp run dist:desktop:artifact --platform mac --target dmg --arch arm64 --build-version "$build_version" --verbose
+      - test "$(ls release/*.dmg | wc -l | tr -d ' ')" = 1
+      - ls -l release/*.dmg
+
+  # The agent has no gh CLI, so the upload talks to the REST API directly.
+  - name: publish-prerelease
+    image: /bin/bash
+    environment:
+      GITHUB_TOKEN:
+        from_secret: github_release_token
+    commands:
+      - |-
+        set -euo pipefail
+        cd "$CI_WORKSPACE"
+        api="https://api.github.com"
+        auth="Authorization: Bearer $GITHUB_TOKEN"
+        version="X-GitHub-Api-Version: 2022-11-28"
+        dmg_file="$(ls release/*.dmg | head -1)"
+        asset_name="$(basename "$dmg_file")"
+
+        # One rolling prerelease holds the latest fork build.
+        curl -sS -H "$auth" -H "$version" "$api/repos/$CI_REPO/releases/tags/desktop-fork" -o .release.json
+        release_id="$(node -p 'const j=require("./.release.json"); j.id ? String(j.id) : ""')"
+        if [ -z "$release_id" ]; then
+          curl -sS -X POST -H "$auth" -H "$version" -o .release.json \
+            -d '{"tag_name":"desktop-fork","name":"Fork desktop builds","prerelease":true,"body":"Unsigned macOS builds from the Autimo fork."}' \
+            "$api/repos/$CI_REPO/releases"
+          release_id="$(node -p 'const j=require("./.release.json"); j.id ? String(j.id) : ""')"
+        fi
+        test -n "$release_id"
+
+        # Re-uploading the same commit replaces the asset instead of erroring.
+        curl -sS -H "$auth" -H "$version" "$api/repos/$CI_REPO/releases/$release_id/assets?per_page=100" -o .assets.json
+        old_id="$(node -p 'const a=require("./.assets.json"),n=process.argv[1];const m=Array.isArray(a)?a.find(x=>x.name===n):null;m?String(m.id):""' "$asset_name")"
+        if [ -n "$old_id" ]; then
+          curl -sS -X DELETE -H "$auth" -H "$version" "$api/repos/$CI_REPO/releases/assets/$old_id"
+        fi
+
+        code="$(curl -sS -X POST -H "$auth" -H "$version" -H "Content-Type: application/octet-stream" \
+          --data-binary @"$dmg_file" -o .upload.json -w '%{http_code}' \
+          "https://uploads.github.com/repos/$CI_REPO/releases/$release_id/assets?name=$asset_name")"
+        test "$code" = 201
+        node -p 'require("./.upload.json").browser_download_url'
