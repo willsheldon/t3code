@@ -30,6 +30,7 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import { modelSelectionsEqual } from "@t3tools/shared/model";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -51,6 +52,7 @@ import {
   applyToProjection,
   emptyProjection,
   isTurnItemAtOrBeforeRun,
+  ProjectionStoreReadError,
   ProjectionStoreV2,
 } from "./ProjectionStore.ts";
 import type { ProviderAdapterV2Shape } from "./ProviderAdapter.ts";
@@ -91,6 +93,29 @@ export class OrchestratorProjectionError extends Schema.TaggedErrorClass<Orchest
     return `Failed to load orchestration projection for thread ${this.threadId}.`;
   }
 }
+
+const isProjectionStoreReadError = Schema.is(ProjectionStoreReadError);
+const isOrchestratorDispatchError = Schema.is(OrchestratorDispatchError);
+
+export const runDeferredOrganizationRepair = <A, E, R>(
+  threadId: ThreadId,
+  repair: Effect.Effect<A, E, R>,
+) =>
+  repair.pipe(
+    Effect.retry({
+      times: 1,
+      while: (error) => isProjectionStoreReadError(error) || isOrchestratorDispatchError(error),
+    }),
+    Effect.asVoid,
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause)
+        ? Effect.failCause(cause)
+        : Effect.logWarning("Failed to recover deferred thread organization", {
+            threadId,
+            cause,
+          }),
+    ),
+  );
 
 export class OrchestratorDomainEventStreamError extends Schema.TaggedErrorClass<OrchestratorDomainEventStreamError>()(
   "OrchestratorDomainEventStreamError",
@@ -7249,8 +7274,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           (thread) => thread.deferredOrganization != null,
         ),
         (thread) =>
-          threadDispatch
-            .withLock(
+          runDeferredOrganizationRepair(
+            thread.id,
+            threadDispatch.withLock(
               thread.id,
               Effect.gen(function* () {
                 const projection = yield* projectionStore.getThreadProjection(thread.id);
@@ -7270,15 +7296,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                   yield* applyDeferredOrganization(thread.id, intent.runId);
                 }
               }),
-            )
-            .pipe(
-              Effect.catchCause((cause) =>
-                Effect.logWarning("Failed to recover deferred thread organization", {
-                  threadId: thread.id,
-                  cause,
-                }),
-              ),
             ),
+          ),
         { concurrency: 8, discard: true },
       ),
     ),
