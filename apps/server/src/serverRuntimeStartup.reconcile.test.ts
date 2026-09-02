@@ -152,6 +152,7 @@ it.effect("marks active running sessions that have persisted resume state", () =
         ),
       upsert: (binding) => Effect.sync(() => upserts.push(binding)),
       recordImportedTranscript: () => Effect.die("unused"),
+      remove: () => Effect.void,
       getProvider: () => Effect.die("unused"),
       listThreadIds: () => Effect.die("unused"),
       listBindings: () => Effect.succeed([]),
@@ -281,6 +282,7 @@ it.effect.each(
               ),
             ),
           recordImportedTranscript: () => Effect.die("unused"),
+          remove: () => Effect.void,
           getProvider: () => Effect.die("unused"),
           listThreadIds: () => Effect.die("unused"),
           listBindings: () => Effect.succeed([]),
@@ -365,7 +367,6 @@ it.effect.each(
       );
     }),
 );
-
 it.effect("does not continue archived or deleted marked sessions", () => {
   const archived = makeThread(
     "thread-continue-archived",
@@ -412,6 +413,7 @@ it.effect("does not continue archived or deleted marked sessions", () => {
       },
       upsert: () => Effect.void,
       recordImportedTranscript: () => Effect.die("unused"),
+      remove: () => Effect.void,
       getProvider: () => Effect.die("unused"),
       listThreadIds: () => Effect.die("unused"),
       listBindings: () => Effect.succeed([]),
@@ -466,6 +468,7 @@ it.effect("retries continuation preparation before settling a persistent failure
         }),
       upsert: () => Effect.void,
       recordImportedTranscript: () => Effect.die("unused"),
+      remove: () => Effect.void,
       getProvider: () => Effect.die("unused"),
       listThreadIds: () => Effect.die("unused"),
       listBindings: () => Effect.succeed([]),
@@ -538,6 +541,7 @@ it.effect("reconciles multiple active and archived orphans but skips live sessio
         ),
       upsert: (binding) => Effect.sync(() => upserts.push(binding)),
       recordImportedTranscript: () => Effect.die("unused"),
+      remove: () => Effect.void,
       getProvider: () => Effect.die("unused"),
       listThreadIds: () => Effect.die("unused"),
       listBindings: () => Effect.succeed([]),
@@ -616,6 +620,7 @@ it.effect(
                 }),
         upsert: () => Effect.fail(writeFailure),
         recordImportedTranscript: () => Effect.die("unused"),
+        remove: () => Effect.void,
         getProvider: () => Effect.die("unused"),
         listThreadIds: () => Effect.die("unused"),
         listBindings: () => Effect.succeed([]),
@@ -654,6 +659,7 @@ it.effect("retries failed projections and continues after a persistent failure",
       getBinding: () => Effect.succeedNone,
       upsert: () => Effect.void,
       recordImportedTranscript: () => Effect.die("unused"),
+      remove: () => Effect.void,
       getProvider: () => Effect.die("unused"),
       listThreadIds: () => Effect.die("unused"),
       listBindings: () => Effect.succeed([]),
@@ -704,6 +710,7 @@ it.effect("does not fail startup when the live provider session inventory cannot
       getBinding: () => Effect.die("unused"),
       upsert: () => Effect.die("unused"),
       recordImportedTranscript: () => Effect.die("unused"),
+      remove: () => Effect.void,
       getProvider: () => Effect.die("unused"),
       listThreadIds: () => Effect.die("unused"),
       listBindings: () => Effect.succeed([]),
@@ -768,6 +775,7 @@ for (const scenario of [
             upserts.push(binding);
           }),
         recordImportedTranscript: () => Effect.die("unused"),
+        remove: () => Effect.void,
         getProvider: () => Effect.die("unused"),
         listThreadIds: () => Effect.die("unused"),
         listBindings: () => Effect.succeed([]),
@@ -842,6 +850,7 @@ for (const preparedStatus of [
               yield* Deferred.succeed(cleared, undefined);
             }),
           recordImportedTranscript: () => Effect.die("unused"),
+          remove: () => Effect.void,
           getProvider: () => Effect.die("unused"),
           listThreadIds: () => Effect.die("unused"),
           listBindings: () =>
@@ -946,6 +955,7 @@ it.effect("settles failed opt-in recovery without retrying the provider turn", (
             binding = next;
           }),
         recordImportedTranscript: () => Effect.die("unused"),
+        remove: () => Effect.void,
         getProvider: () => Effect.die("unused"),
         listThreadIds: () => Effect.die("unused"),
         listBindings: () => Effect.succeed([]),
