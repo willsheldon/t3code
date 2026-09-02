@@ -133,6 +133,7 @@ it.effect("marks active running sessions that have persisted resume state", () =
       upsert: (binding) => Effect.sync(() => upserts.push(binding)),
       getProvider: () => Effect.die("unused"),
       listThreadIds: () => Effect.die("unused"),
+      remove: () => Effect.void,
       listBindings: () => Effect.die("unused"),
     }),
     Effect.tap((marked) =>
@@ -233,6 +234,7 @@ it.effect("continues marked sessions after activation with provider-specific inp
           ),
         getProvider: () => Effect.die("unused"),
         listThreadIds: () => Effect.die("unused"),
+        remove: () => Effect.void,
         listBindings: () => Effect.die("unused"),
       },
       dispatch: (command) =>
@@ -356,6 +358,7 @@ it.effect("does not continue archived or deleted marked sessions", () => {
       upsert: () => Effect.void,
       getProvider: () => Effect.die("unused"),
       listThreadIds: () => Effect.die("unused"),
+      remove: () => Effect.void,
       listBindings: () => Effect.die("unused"),
     },
     dispatch: (command) =>
@@ -411,6 +414,7 @@ it.effect("retries continuation preparation before settling a persistent failure
       upsert: () => Effect.void,
       getProvider: () => Effect.die("unused"),
       listThreadIds: () => Effect.die("unused"),
+      remove: () => Effect.void,
       listBindings: () => Effect.die("unused"),
     },
     dispatch: (command) => {
@@ -482,6 +486,7 @@ it.effect("reconciles multiple active and archived orphans but skips live sessio
       upsert: (binding) => Effect.sync(() => upserts.push(binding)),
       getProvider: () => Effect.die("unused"),
       listThreadIds: () => Effect.die("unused"),
+      remove: () => Effect.void,
       listBindings: () => Effect.die("unused"),
     },
     dispatch: (command) =>
@@ -560,6 +565,7 @@ it.effect(
         upsert: () => Effect.fail(writeFailure),
         getProvider: () => Effect.die("unused"),
         listThreadIds: () => Effect.die("unused"),
+        remove: () => Effect.void,
         listBindings: () => Effect.die("unused"),
       },
       dispatch: (command) =>
@@ -597,6 +603,7 @@ it.effect("retries failed projections and continues after a persistent failure",
       upsert: () => Effect.void,
       getProvider: () => Effect.die("unused"),
       listThreadIds: () => Effect.die("unused"),
+      remove: () => Effect.void,
       listBindings: () => Effect.die("unused"),
     },
     dispatch: (command) => {
@@ -645,6 +652,7 @@ it.effect("does not fail startup when the live provider session inventory cannot
       upsert: () => Effect.die("unused"),
       getProvider: () => Effect.die("unused"),
       listThreadIds: () => Effect.die("unused"),
+      remove: () => Effect.void,
       listBindings: () => Effect.die("unused"),
     }),
     Effect.provideService(OrchestrationEngine.OrchestrationEngineService, {
