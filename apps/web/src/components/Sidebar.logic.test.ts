@@ -37,6 +37,7 @@ import {
   planPinnedReorder,
   planSidebarThreadDrop,
   sidebarMarkerId,
+  isBotThreadTitle,
   sidebarListItemId,
   sortPinnedThreadsForSidebar,
   sortThreadsForSidebar,
@@ -350,6 +351,19 @@ describe("hasUnseenCompletion", () => {
         session: null,
       }),
     ).toBe(false);
+  });
+});
+
+describe("isBotThreadTitle", () => {
+  it("matches t3-dispatch titles", () => {
+    expect(isBotThreadTitle("bot-claude-code--fix sidebar")).toBe(true);
+    expect(isBotThreadTitle("bot-codex--task")).toBe(true);
+  });
+
+  it("ignores titles that only mention bots", () => {
+    expect(isBotThreadTitle("bot-claude-code fix")).toBe(false);
+    expect(isBotThreadTitle("Fix bot--prefix parsing")).toBe(false);
+    expect(isBotThreadTitle("robot-arm--calibration")).toBe(false);
   });
 });
 

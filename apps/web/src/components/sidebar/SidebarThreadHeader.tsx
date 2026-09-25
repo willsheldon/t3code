@@ -10,7 +10,14 @@
  * of the sidebar's scope logic. `searchFieldRef` lands on the search field so
  * the picker's popup can anchor to that width rather than to its 28px trigger.
  */
-import { FolderPlusIcon, SearchIcon, SquarePenIcon, XIcon } from "lucide-react";
+import {
+  BotIcon,
+  BotOffIcon,
+  FolderPlusIcon,
+  SearchIcon,
+  SquarePenIcon,
+  XIcon,
+} from "lucide-react";
 import {
   type ComponentProps,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -31,6 +38,9 @@ export interface SidebarThreadHeaderProps {
   hasProjects: boolean;
   /** The project scope combobox, rendered as the first icon of the group. */
   projectScope: ReactNode;
+  /** Hides threads titled `bot-<caller>--...` (created by t3-dispatch). */
+  hideBotThreads: boolean;
+  onToggleHideBotThreads: () => void;
   onNewProject: () => void;
   /** Receives the click so Shift+click can skip the project picker. */
   onNewThread: (event: ReactMouseEvent) => void;
@@ -53,6 +63,8 @@ export function SidebarThreadHeader({
   searchFieldRef,
   hasProjects,
   projectScope,
+  hideBotThreads,
+  onToggleHideBotThreads,
   onNewProject,
   onNewThread,
   newThreadDisabled,
@@ -126,6 +138,14 @@ export function SidebarThreadHeader({
       <div className="flex shrink-0 items-center">
         {hasProjects ? (
           <>
+            <SidebarHeaderIconButton
+              label="Hide bot threads"
+              tooltip={hideBotThreads ? "Show bot threads" : "Hide bot threads"}
+              aria-pressed={hideBotThreads}
+              onClick={onToggleHideBotThreads}
+            >
+              {hideBotThreads ? <BotOffIcon /> : <BotIcon />}
+            </SidebarHeaderIconButton>
             {projectScope}
             <SidebarHeaderIconButton label="New project" onClick={onNewProject}>
               <FolderPlusIcon />

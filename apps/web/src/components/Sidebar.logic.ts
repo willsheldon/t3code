@@ -783,6 +783,13 @@ export type SidebarThreadStatus =
   | "failed"
   | "ready";
 
+// Threads created by t3-dispatch carry a `bot-<caller>--` title prefix.
+const BOT_THREAD_TITLE_PATTERN = /^bot-[a-z0-9]+(?:-[a-z0-9]+)*--/;
+
+export function isBotThreadTitle(title: string): boolean {
+  return BOT_THREAD_TITLE_PATTERN.test(title);
+}
+
 export function shouldRecedeSidebarThread(input: {
   status: SidebarThreadStatus;
   isUnread: boolean;

@@ -177,6 +177,7 @@ import {
   shouldNavigateAfterThreadPark,
   shouldRecedeSidebarThread,
   resolveWorkingStartedAt,
+  isBotThreadTitle,
   sidebarListItemId,
   sidebarMarkerId,
   sortLogicalProjectsForSidebar,
@@ -254,6 +255,7 @@ const SETTLED_TAIL_PAGE_COUNT = 25;
 // Fresh keys deliberately reset both shelves to collapsed for existing users.
 const SETTLED_SHELF_EXPANDED_KEY = "t3code:sidebar:settled-expanded";
 const SNOOZED_SHELF_EXPANDED_KEY = "t3code:sidebar:snoozed-expanded";
+const HIDE_BOT_THREADS_KEY = "t3code:sidebar:hide-bot-threads";
 
 function compactSidebarTimeLabel(label: string): string {
   if (label === "just now") return "now";
@@ -2520,6 +2522,18 @@ export default function Sidebar() {
         override holds until all of them appear in canonical state. */
     readonly assignedKeys: ReadonlyMap<string, string>;
   } | null>(null);
+  const [hideBotThreads, setHideBotThreads] = useLocalStorage(
+    HIDE_BOT_THREADS_KEY,
+    false,
+    Schema.Boolean,
+  );
+  const toggleHideBotThreads = useCallback(
+    () => setHideBotThreads((value) => !value),
+    [setHideBotThreads],
+  );
+  // Only the hide filter reads the route, so navigation does not re-partition
+  // the list while bot threads are shown.
+  const botExemptThreadKey = hideBotThreads ? routeThreadKey : null;
   const {
     pinnedThreads,
     draggableThreadKeys,
@@ -2539,7 +2553,11 @@ export default function Sidebar() {
       (thread) =>
         thread.archivedAt === null &&
         (scopedProjectKeys === null ||
-          scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),
+          scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)) &&
+        // The open thread keeps its row even when bot threads are hidden.
+        (!hideBotThreads ||
+          !isBotThreadTitle(thread.title) ||
+          scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)) === botExemptThreadKey),
     );
     const pinned: EnvironmentThreadShell[] = [];
     const active: EnvironmentThreadShell[] = [];
@@ -2625,7 +2643,16 @@ export default function Sidebar() {
       settledThreads: sortSettledThreadsForSidebar(settled),
       snoozeNow: preciseNow,
     };
-  }, [nowMinute, optimisticDrop, scopedProjectKeys, serverConfigs, snoozeWakeTick, threads]);
+  }, [
+    botExemptThreadKey,
+    hideBotThreads,
+    nowMinute,
+    optimisticDrop,
+    scopedProjectKeys,
+    serverConfigs,
+    snoozeWakeTick,
+    threads,
+  ]);
 
   const threadSearchInputRef = useRef<HTMLInputElement>(null);
   const [threadSearchQuery, setThreadSearchQuery] = useState("");
@@ -4414,6 +4441,8 @@ export default function Sidebar() {
             <SidebarThreadHeader
               searchFieldRef={headerSearchRef}
               hasProjects={projectGroups.length > 0}
+              hideBotThreads={hideBotThreads}
+              onToggleHideBotThreads={toggleHideBotThreads}
               projectScope={
                 <Combobox
                   items={projectScopeItems}
