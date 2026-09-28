@@ -182,6 +182,7 @@ import {
   hasUnseenCompletion,
   isSidebarNestedLinkClick,
   isSidebarThreadWorking,
+  matchesSidebarThreadFilters,
   isTrailingDoubleClick,
   orderItemsByPreferredIds,
   planSidebarThreadDrop,
@@ -200,6 +201,7 @@ import {
   shouldRecedeSidebarThread,
   resolveWorkingStartedAt,
   sidebarListItemId,
+  sidebarThreadAccountKey,
   sidebarMarkerId,
   sortInboxThreadsByReturn,
   sortPinnedThreadsForSidebar,
@@ -286,6 +288,9 @@ const SETTLED_TAIL_PAGE_COUNT = 25;
 const SETTLED_SHELF_EXPANDED_KEY = "t3code:sidebar:settled-expanded";
 const SNOOZED_SHELF_EXPANDED_KEY = "t3code:sidebar:snoozed-expanded";
 const WORKING_SHELF_EXPANDED_KEY = "t3code:sidebar:working-expanded";
+const HIDE_BOT_THREADS_KEY = "t3code:sidebar:hide-bot-threads";
+const SIDEBAR_ACCOUNT_FILTER_KEY = "t3code:sidebar:account-filter";
+const SIDEBAR_ACCOUNT_FILTER_SCHEMA = Schema.NullOr(Schema.String);
 
 // Working beta: when this client saw each thread leave the Working shelf.
 // Module scope keeps the inbox order across routes that unmount the sidebar.
@@ -2458,6 +2463,25 @@ export default function Sidebar() {
       ),
     [serverConfigs],
   );
+  const accountOptions = useMemo(() => {
+    const options = new Map<string, { key: string; label: string }>();
+    for (const thread of threads) {
+      if (thread.archivedAt !== null) continue;
+      const key = sidebarThreadAccountKey(thread);
+      if (options.has(key)) continue;
+      const instanceId = thread.session?.providerInstanceId ?? thread.modelSelection.instanceId;
+      const name =
+        providerEntriesByEnvironment.get(thread.environmentId)?.get(instanceId)?.displayName ??
+        thread.session?.providerName ??
+        instanceId;
+      const environment = environmentLabelById.get(thread.environmentId);
+      options.set(key, {
+        key,
+        label: environments.length > 1 && environment ? `${name} · ${environment}` : name,
+      });
+    }
+    return [...options.values()].toSorted((left, right) => left.label.localeCompare(right.label));
+  }, [environmentLabelById, environments.length, providerEntriesByEnvironment, threads]);
   // Rows read the project record for its icon and cwd. Group labels can include
   // a repository owner or a different title, so they travel separately.
   const projectByKey = useMemo(
@@ -2569,6 +2593,16 @@ export default function Sidebar() {
       setProjectScopeKey(null);
     }
   }, [allProjectSnapshotsReady, projectScopeKey, scopedProjectGroup, setProjectScopeKey]);
+  const [hideBotThreads, setHideBotThreads] = useLocalStorage(
+    HIDE_BOT_THREADS_KEY,
+    false,
+    Schema.Boolean,
+  );
+  const [selectedAccountKey, setSelectedAccountKey] = useLocalStorage(
+    SIDEBAR_ACCOUNT_FILTER_KEY,
+    null as string | null,
+    SIDEBAR_ACCOUNT_FILTER_SCHEMA,
+  );
   // Count-only subscription: the parent needs "are there draft rows" for the
   // empty state, while SidebarDraftBlock owns the per-keystroke content
   // subscription. Selecting a number keeps typing in a draft composer from
@@ -2595,11 +2629,10 @@ export default function Sidebar() {
     }
     return count;
   });
-  // Scope flips drop the selection: rows selected under the old scope may be
-  // hidden now, and bulk actions must never count or touch invisible rows.
+  // Filter changes drop the selection: bulk actions must never touch hidden rows.
   useEffect(() => {
     clearSelection();
-  }, [clearSelection, projectScopeKey]);
+  }, [clearSelection, hideBotThreads, projectScopeKey, selectedAccountKey]);
 
   const openProjectSettings = useCallback(
     (projectGroup: SidebarProjectSnapshot) => {
@@ -2650,6 +2683,8 @@ export default function Sidebar() {
         override holds until all of them appear in canonical state. */
     readonly assignedKeys: ReadonlyMap<string, string>;
   } | null>(null);
+  const filterExemptThreadKey =
+    hideBotThreads || selectedAccountKey !== null ? routeThreadKey : null;
   const {
     pinnedThreads,
     draggableThreadKeys,
@@ -2668,7 +2703,15 @@ export default function Sidebar() {
     const preciseNow = new Date().toISOString();
     // Subagent child threads live in the parent's Agents surface, not the
     // sidebar roster (v2 models them as real threads with lineage).
-    const visible = filterSidebarV2VisibleThreads(threads, scopedProjectKeys);
+    const visible = filterSidebarV2VisibleThreads(threads, scopedProjectKeys).filter((thread) =>
+      matchesSidebarThreadFilters(thread, {
+        hideBotThreads,
+        accountKey: selectedAccountKey,
+        isOpen:
+          scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)) ===
+          filterExemptThreadKey,
+      }),
+    );
     observeInboxReturns(workingShelfEnabled ? threads : null);
     const pinned: EnvironmentThreadShell[] = [];
     const active: EnvironmentThreadShell[] = [];
@@ -2773,9 +2816,12 @@ export default function Sidebar() {
       snoozeNow: preciseNow,
     };
   }, [
+    filterExemptThreadKey,
+    hideBotThreads,
     nowMinute,
     optimisticDrop,
     scopedProjectKeys,
+    selectedAccountKey,
     serverConfigs,
     snoozeWakeTick,
     threads,
@@ -4677,6 +4723,11 @@ export default function Sidebar() {
             <SidebarThreadHeader
               searchFieldRef={headerSearchRef}
               hasProjects={projectGroups.length > 0}
+              hideBotThreads={hideBotThreads}
+              onHideBotThreadsChange={setHideBotThreads}
+              accountOptions={accountOptions}
+              selectedAccountKey={selectedAccountKey}
+              onAccountChange={setSelectedAccountKey}
               projectScope={
                 <Combobox
                   items={projectScopeItems}
@@ -5245,6 +5296,8 @@ export default function Sidebar() {
                     Add project
                   </button>
                 </>
+              ) : hideBotThreads || selectedAccountKey !== null ? (
+                "No threads match filters"
               ) : scopedProjectGroup ? (
                 `No threads in ${scopedProjectGroup.displayName} yet`
               ) : (

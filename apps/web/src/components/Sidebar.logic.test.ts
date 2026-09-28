@@ -24,6 +24,9 @@ import {
   isContextMenuPointerDown,
   isSidebarSubagentThread,
   isSidebarThreadWorking,
+  isBotThreadTitle,
+  matchesSidebarThreadFilters,
+  sidebarThreadAccountKey,
   isTrailingDoubleClick,
   orderItemsByPreferredIds,
   pinOrderKeyBetween,
@@ -72,6 +75,46 @@ import {
 import { makeThreadFixture, type ThreadFixtureOverrides } from "../test-fixtures";
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
+
+describe("sidebar conversation filters", () => {
+  const thread = {
+    title: "bot-codex--review",
+    environmentId: "env-one",
+    modelSelection: { instanceId: "codex-default" },
+    session: { providerInstanceId: "codex-work" },
+  };
+
+  it("identifies dispatched bot titles without matching ordinary mentions", () => {
+    expect(isBotThreadTitle(thread.title)).toBe(true);
+    expect(isBotThreadTitle("Fix bot--prefix parsing")).toBe(false);
+    expect(isBotThreadTitle("bot-codex review")).toBe(false);
+  });
+
+  it("uses the session account and keeps environments separate", () => {
+    expect(sidebarThreadAccountKey(thread)).toBe('["env-one","codex-work"]');
+    expect(sidebarThreadAccountKey({ ...thread, session: null })).toBe(
+      '["env-one","codex-default"]',
+    );
+    expect(
+      matchesSidebarThreadFilters(thread, {
+        hideBotThreads: false,
+        accountKey: '["env-two","codex-work"]',
+        isOpen: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("combines bot and account filters while keeping the open thread visible", () => {
+    const filters = {
+      hideBotThreads: true,
+      accountKey: '["env-one","codex-work"]',
+      isOpen: false,
+    };
+    expect(matchesSidebarThreadFilters(thread, filters)).toBe(false);
+    expect(matchesSidebarThreadFilters({ ...thread, title: "Review" }, filters)).toBe(true);
+    expect(matchesSidebarThreadFilters(thread, { ...filters, isOpen: true })).toBe(true);
+  });
+});
 
 describe("resolveSidebarRowAccessibility", () => {
   it.each([
