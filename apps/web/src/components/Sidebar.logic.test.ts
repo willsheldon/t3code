@@ -21,6 +21,11 @@ import {
   isContextMenuPointerDown,
   isSidebarNestedLinkClick,
   isSidebarThreadWorking,
+  isBotThreadTitle,
+  matchesSidebarThreadFilters,
+  sidebarThreadAccountKey,
+  sidebarThreadFilterButtonLabel,
+  SIDEBAR_UNAVAILABLE_ACCOUNT_LABEL,
   isTrailingDoubleClick,
   orderItemsByPreferredIds,
   resolveProjectStatusIndicator,
@@ -70,6 +75,69 @@ import {
 } from "../types";
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
+
+describe("sidebar conversation filters", () => {
+  const thread = {
+    title: "bot-codex--review",
+    environmentId: "env-one",
+    modelSelection: { instanceId: "codex-default" },
+    session: { providerInstanceId: "codex-work" },
+  };
+
+  it("identifies dispatched bot titles without matching ordinary mentions", () => {
+    expect(isBotThreadTitle(thread.title)).toBe(true);
+    expect(isBotThreadTitle("Fix bot--prefix parsing")).toBe(false);
+    expect(isBotThreadTitle("bot-codex review")).toBe(false);
+  });
+
+  it("uses the session account and keeps environments separate", () => {
+    expect(sidebarThreadAccountKey(thread)).toBe('["env-one","codex-work"]');
+    expect(sidebarThreadAccountKey({ ...thread, session: null })).toBe(
+      '["env-one","codex-default"]',
+    );
+    expect(
+      matchesSidebarThreadFilters(thread, {
+        hideBotThreads: false,
+        accountKey: '["env-two","codex-work"]',
+        isOpen: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("combines bot and account filters while keeping the open thread visible", () => {
+    const filters = {
+      hideBotThreads: true,
+      accountKey: '["env-one","codex-work"]',
+      isOpen: false,
+    };
+    expect(matchesSidebarThreadFilters(thread, filters)).toBe(false);
+    expect(matchesSidebarThreadFilters({ ...thread, title: "Review" }, filters)).toBe(true);
+    expect(matchesSidebarThreadFilters(thread, { ...filters, isOpen: true })).toBe(true);
+  });
+
+  it("names what the trigger filters and which filters are on", () => {
+    const accountOptions = [{ key: '["env-one","codex-work"]', label: "AU" }];
+    const label = (hideBotThreads: boolean, selectedAccountKey: string | null) =>
+      sidebarThreadFilterButtonLabel({ hideBotThreads, selectedAccountKey, accountOptions });
+
+    expect(label(false, null)).toBe("Filter threads by bot and account");
+    expect(label(true, null)).toBe("Filter threads by bot and account: bot threads hidden");
+    expect(label(false, '["env-one","codex-work"]')).toBe("Filter threads by bot and account: AU");
+    expect(label(true, '["env-one","codex-work"]')).toBe(
+      "Filter threads by bot and account: bot threads hidden, AU",
+    );
+  });
+
+  it("names a dropped account the same way the menu row does", () => {
+    expect(
+      sidebarThreadFilterButtonLabel({
+        hideBotThreads: false,
+        selectedAccountKey: '["env-gone","codex-work"]',
+        accountOptions: [{ key: '["env-one","codex-work"]', label: "AU" }],
+      }),
+    ).toBe(`Filter threads by bot and account: ${SIDEBAR_UNAVAILABLE_ACCOUNT_LABEL}`);
+  });
+});
 
 describe("resolveSidebarRowAccessibility", () => {
   it.each([

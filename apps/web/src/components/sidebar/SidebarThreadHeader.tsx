@@ -10,7 +10,7 @@
  * of the sidebar's scope logic. `searchFieldRef` lands on the search field so
  * the picker's popup can anchor to that width rather than to its 28px trigger.
  */
-import { FolderPlusIcon, SearchIcon, SquarePenIcon, XIcon } from "lucide-react";
+import { FolderPlusIcon, ListFilterIcon, SearchIcon, SquarePenIcon, XIcon } from "lucide-react";
 import {
   type ComponentProps,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -20,7 +20,23 @@ import {
 } from "react";
 
 import { cn } from "~/lib/utils";
+import {
+  SIDEBAR_UNAVAILABLE_ACCOUNT_LABEL,
+  sidebarThreadFilterButtonLabel,
+} from "../Sidebar.logic";
 import { Button } from "../ui/button";
+import {
+  Menu,
+  MenuCheckboxItem,
+  MenuGroupLabel,
+  MenuItem,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuRadioItemIndicator,
+  MenuSeparator,
+  MenuTrigger,
+} from "../ui/menu";
 import { SidebarInput, SidebarMenuButton } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
@@ -31,6 +47,11 @@ export interface SidebarThreadHeaderProps {
   hasProjects: boolean;
   /** The project scope combobox, rendered as the first icon of the group. */
   projectScope: ReactNode;
+  hideBotThreads: boolean;
+  onHideBotThreadsChange: (hide: boolean) => void;
+  accountOptions: ReadonlyArray<{ readonly key: string; readonly label: string }>;
+  selectedAccountKey: string | null;
+  onAccountChange: (key: string | null) => void;
   onNewProject: () => void;
   /** Receives the click so Shift+click can skip the project picker. */
   onNewThread: (event: ReactMouseEvent) => void;
@@ -53,6 +74,11 @@ export function SidebarThreadHeader({
   searchFieldRef,
   hasProjects,
   projectScope,
+  hideBotThreads,
+  onHideBotThreadsChange,
+  accountOptions,
+  selectedAccountKey,
+  onAccountChange,
   onNewProject,
   onNewThread,
   newThreadDisabled,
@@ -76,6 +102,12 @@ export function SidebarThreadHeader({
   const newThreadLabel = newThreadShortcutLabel
     ? `New thread (${newThreadShortcutLabel})`
     : "New thread";
+  const filtersActive = hideBotThreads || selectedAccountKey !== null;
+  const filterButtonLabel = sidebarThreadFilterButtonLabel({
+    hideBotThreads,
+    selectedAccountKey,
+    accountOptions,
+  });
 
   return (
     <div className="flex items-center gap-1">
@@ -124,6 +156,76 @@ export function SidebarThreadHeader({
           hover states, and a background well reads far louder on themed
           palettes than on the base light and dark ones. */}
       <div className="flex shrink-0 items-center">
+        <Menu>
+          <MenuTrigger render={<SidebarHeaderIconButton label={filterButtonLabel} />}>
+            <ListFilterIcon className={cn("size-4", filtersActive && "text-sidebar-foreground")} />
+            {filtersActive ? (
+              <span
+                aria-hidden
+                className="absolute right-0.5 top-0.5 size-1.5 rounded-full bg-primary"
+              />
+            ) : null}
+          </MenuTrigger>
+          <MenuPopup
+            align="end"
+            side="bottom"
+            // Account names are user-chosen and can be long. Without a cap the
+            // menu grows past the sidebar and over the conversation; the cap is
+            // what makes the labels below truncate.
+            className="max-w-[min(18rem,var(--available-width))] overflow-hidden"
+          >
+            <MenuCheckboxItem
+              checked={hideBotThreads}
+              closeOnClick={false}
+              onCheckedChange={onHideBotThreadsChange}
+            >
+              Hide dispatched bot threads
+            </MenuCheckboxItem>
+            <MenuSeparator />
+            <MenuRadioGroup
+              value={selectedAccountKey ?? ""}
+              onValueChange={(value) => onAccountChange(value || null)}
+            >
+              <MenuGroupLabel>LLM account</MenuGroupLabel>
+              <MenuRadioItem value="">
+                <span className="flex items-center gap-2">
+                  All accounts
+                  <MenuRadioItemIndicator className="ms-auto" />
+                </span>
+              </MenuRadioItem>
+              {accountOptions.map((option) => (
+                <MenuRadioItem key={option.key} value={option.key}>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                    <MenuRadioItemIndicator />
+                  </span>
+                </MenuRadioItem>
+              ))}
+              {selectedAccountKey !== null &&
+              !accountOptions.some((option) => option.key === selectedAccountKey) ? (
+                <MenuRadioItem value={selectedAccountKey} disabled>
+                  <span className="flex items-center gap-2">
+                    {SIDEBAR_UNAVAILABLE_ACCOUNT_LABEL}
+                    <MenuRadioItemIndicator className="ms-auto" />
+                  </span>
+                </MenuRadioItem>
+              ) : null}
+            </MenuRadioGroup>
+            {filtersActive ? (
+              <>
+                <MenuSeparator />
+                <MenuItem
+                  onClick={() => {
+                    onHideBotThreadsChange(false);
+                    onAccountChange(null);
+                  }}
+                >
+                  Clear bot and account filters
+                </MenuItem>
+              </>
+            ) : null}
+          </MenuPopup>
+        </Menu>
         {hasProjects ? (
           <>
             {projectScope}

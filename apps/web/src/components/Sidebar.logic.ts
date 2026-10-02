@@ -821,6 +821,74 @@ export type SidebarThreadStatus =
   | "failed"
   | "ready";
 
+// t3-dispatch titles begin with `bot-<caller>--`.
+const BOT_THREAD_TITLE_PATTERN = /^bot-[a-z0-9]+(?:-[a-z0-9]+)*--/;
+
+export function isBotThreadTitle(title: string): boolean {
+  return BOT_THREAD_TITLE_PATTERN.test(title);
+}
+
+type SidebarFilterThread = {
+  readonly title: string;
+  readonly environmentId: string;
+  readonly modelSelection: { readonly instanceId: string };
+  readonly session: { readonly providerInstanceId?: string | undefined } | null;
+};
+
+export function sidebarThreadAccountKey(thread: SidebarFilterThread): string {
+  return JSON.stringify([
+    thread.environmentId,
+    thread.session?.providerInstanceId ?? thread.modelSelection.instanceId,
+  ]);
+}
+
+export function matchesSidebarThreadFilters(
+  thread: SidebarFilterThread,
+  filters: {
+    readonly hideBotThreads: boolean;
+    readonly accountKey: string | null;
+    readonly isOpen: boolean;
+  },
+): boolean {
+  return (
+    filters.isOpen ||
+    ((!filters.hideBotThreads || !isBotThreadTitle(thread.title)) &&
+      (filters.accountKey === null || sidebarThreadAccountKey(thread) === filters.accountKey))
+  );
+}
+
+/**
+ * Shown for a persisted account the current environments no longer offer, both
+ * as the menu's own row and inside the trigger's name, so what a screen reader
+ * hears matches what the menu shows.
+ */
+export const SIDEBAR_UNAVAILABLE_ACCOUNT_LABEL = "Unavailable account";
+
+/**
+ * Accessible name for the filter trigger. It sits beside the project scope
+ * trigger, whose name is "Filter threads by project", so this one has to name
+ * what it filters too. The active-state dot is decorative, so the name is the
+ * only place a screen reader learns a filter is on.
+ */
+export function sidebarThreadFilterButtonLabel(input: {
+  readonly hideBotThreads: boolean;
+  readonly selectedAccountKey: string | null;
+  readonly accountOptions: ReadonlyArray<{ readonly key: string; readonly label: string }>;
+}): string {
+  const active = [
+    ...(input.hideBotThreads ? ["bot threads hidden"] : []),
+    ...(input.selectedAccountKey === null
+      ? []
+      : [
+          input.accountOptions.find((option) => option.key === input.selectedAccountKey)?.label ??
+            SIDEBAR_UNAVAILABLE_ACCOUNT_LABEL,
+        ]),
+  ];
+  return active.length === 0
+    ? "Filter threads by bot and account"
+    : `Filter threads by bot and account: ${active.join(", ")}`;
+}
+
 export function shouldRecedeSidebarThread(input: {
   status: SidebarThreadStatus;
   isUnread: boolean;
