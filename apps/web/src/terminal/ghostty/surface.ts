@@ -1504,7 +1504,7 @@ export class GhosttyTerminalSurface {
       this.scrollViewport(this.selectionScrollDelta);
       const pointer = this.selectionPointer;
       if (pointer) this.extendSelectionTo(pointer.x, pointer.y);
-    }, 80);
+    }, 50);
   }
 
   private updateHoverCursor(event: PointerEvent): void {
