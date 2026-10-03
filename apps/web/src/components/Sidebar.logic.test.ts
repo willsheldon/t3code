@@ -82,8 +82,7 @@ describe("sidebar conversation filters", () => {
   const thread = {
     title: "bot-codex--review",
     environmentId: "env-one",
-    modelSelection: { instanceId: "codex-default" },
-    session: { providerInstanceId: "codex-work" },
+    providerInstanceId: "codex-work",
   };
 
   it("identifies dispatched bot titles without matching ordinary mentions", () => {
@@ -92,11 +91,8 @@ describe("sidebar conversation filters", () => {
     expect(isBotThreadTitle("bot-codex review")).toBe(false);
   });
 
-  it("uses the session account and keeps environments separate", () => {
+  it("uses the thread's provider instance and keeps environments separate", () => {
     expect(sidebarThreadAccountKey(thread)).toBe('["env-one","codex-work"]');
-    expect(sidebarThreadAccountKey({ ...thread, session: null })).toBe(
-      '["env-one","codex-default"]',
-    );
     expect(
       matchesSidebarThreadFilters(thread, {
         hideBotThreads: false,

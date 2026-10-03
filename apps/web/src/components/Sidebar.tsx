@@ -173,6 +173,7 @@ import {
   animateSidebarLayoutChanges,
   applySidebarThreadDrop,
   filterSidebarV2VisibleThreads,
+  isSidebarSubagentThread,
   buildBulkTitleRegenerationContextMenuItem,
   buildBulkUnpinContextMenuItem,
   deleteSelectedThreadEntries,
@@ -2466,13 +2467,13 @@ export default function Sidebar() {
   const accountOptions = useMemo(() => {
     const options = new Map<string, { key: string; label: string }>();
     for (const thread of threads) {
-      if (thread.archivedAt !== null) continue;
+      // Match the rows the sidebar can show: subagent children are hidden.
+      if (thread.archivedAt !== null || isSidebarSubagentThread(thread)) continue;
       const key = sidebarThreadAccountKey(thread);
       if (options.has(key)) continue;
-      const instanceId = thread.session?.providerInstanceId ?? thread.modelSelection.instanceId;
+      const instanceId = thread.providerInstanceId;
       const name =
         providerEntriesByEnvironment.get(thread.environmentId)?.get(instanceId)?.displayName ??
-        thread.session?.providerName ??
         instanceId;
       const environment = environmentLabelById.get(thread.environmentId);
       options.set(key, {

@@ -936,15 +936,11 @@ export function isBotThreadTitle(title: string): boolean {
 type SidebarFilterThread = {
   readonly title: string;
   readonly environmentId: string;
-  readonly modelSelection: { readonly instanceId: string };
-  readonly session: { readonly providerInstanceId?: string | undefined } | null;
+  readonly providerInstanceId: string;
 };
 
 export function sidebarThreadAccountKey(thread: SidebarFilterThread): string {
-  return JSON.stringify([
-    thread.environmentId,
-    thread.session?.providerInstanceId ?? thread.modelSelection.instanceId,
-  ]);
+  return JSON.stringify([thread.environmentId, thread.providerInstanceId]);
 }
 
 export function matchesSidebarThreadFilters(
