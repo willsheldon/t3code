@@ -182,6 +182,11 @@ import {
   filterSidebarV2VisibleThreads,
   groupSidebarThreadsByProject,
   sidebarFolderExpansionKeys,
+  isSidebarSubagentThread,
+  isSidebarTitleFilterActive,
+  matchesSidebarThreadFilters,
+  sidebarThreadAccountKey,
+  type SidebarTitleFilter,
   buildBulkTitleRegenerationContextMenuItem,
   buildBulkUnpinContextMenuItem,
   deleteSelectedThreadEntries,
@@ -332,6 +337,15 @@ const SETTLED_SHELF_EXPANDED_KEY = "t3code:sidebar:settled-expanded";
 const SNOOZED_SHELF_EXPANDED_KEY = "t3code:sidebar:snoozed-expanded";
 const WORKING_SHELF_EXPANDED_KEY = "t3code:sidebar:working-expanded";
 
+const SIDEBAR_TITLE_FILTER_KEY = "t3code:sidebar:title-filter";
+const SIDEBAR_TITLE_FILTER_SCHEMA = Schema.Struct({
+  text: Schema.String,
+  mode: Schema.Literals(["include", "exclude"]),
+});
+const EMPTY_SIDEBAR_TITLE_FILTER: SidebarTitleFilter = { text: "", mode: "exclude" };
+const SIDEBAR_ACCOUNT_FILTER_KEY = "t3code:sidebar:account-filter";
+const SIDEBAR_ACCOUNT_FILTER_SCHEMA = Schema.NullOr(Schema.String);
+
 const inboxReturns = createInboxReturnTracker();
 
 type SidebarOptimisticDrop = {
@@ -361,6 +375,9 @@ interface SidebarThreadPartitionInput {
   // on the clock, so the minute tick, the precise snooze-wake tick and the inbox
   // tracker's expiry version are inputs: a new key repartitions.
   readonly clockKey: string;
+  readonly titleFilter: SidebarTitleFilter;
+  readonly selectedAccountKey: string | null;
+  readonly filterExemptThreadKey: string | null;
 }
 
 function scrollSidebarToTop(content: HTMLElement | null) {
@@ -426,6 +443,8 @@ function useSidebarThreads(input: {
   readonly folderGroups: readonly SidebarProjectSnapshot[] | null;
   // Keeps folders with no active threads, so a project the user filtered to or pinned can start one.
   readonly keepEmptyFolders: (group: SidebarProjectSnapshot) => boolean;
+  readonly titleFilter: SidebarTitleFilter;
+  readonly selectedAccountKey: string | null;
 }) {
   const {
     projectScopeKey,
@@ -438,6 +457,8 @@ function useSidebarThreads(input: {
     routeRowThreadKey,
     folderGroups,
     keepEmptyFolders: keepEmpty,
+    titleFilter,
+    selectedAccountKey,
   } = input;
   // Folders already separate the work, so boring mode has no Working shelf.
   const workingShelfEnabled =
@@ -479,15 +500,18 @@ function useSidebarThreads(input: {
   // Shared with the old per-project sidebar, so folders keep their open state.
   const projectExpandedById = useUiStateStore((store) => store.projectExpandedById);
   const setProjectExpanded = useUiStateStore((store) => store.setProjectExpanded);
+  const threadFiltersActive =
+    isSidebarTitleFilterActive(titleFilter) || selectedAccountKey !== null;
+  const settledResetKey = JSON.stringify([projectScopeKey, titleFilter, selectedAccountKey]);
   const [settledTail, setSettledTail] = useState({
-    scopeKey: projectScopeKey,
+    scopeKey: settledResetKey,
     count: SETTLED_TAIL_INITIAL_COUNT,
   });
-  if (settledTail.scopeKey !== projectScopeKey) {
-    setSettledTail({ scopeKey: projectScopeKey, count: SETTLED_TAIL_INITIAL_COUNT });
+  if (settledTail.scopeKey !== settledResetKey) {
+    setSettledTail({ scopeKey: settledResetKey, count: SETTLED_TAIL_INITIAL_COUNT });
   }
   const settledVisibleCount =
-    settledTail.scopeKey === projectScopeKey ? settledTail.count : SETTLED_TAIL_INITIAL_COUNT;
+    settledTail.scopeKey === settledResetKey ? settledTail.count : SETTLED_TAIL_INITIAL_COUNT;
 
   const partition = partitionSidebarThreads({
     threads,
@@ -500,6 +524,9 @@ function useSidebarThreads(input: {
     sortActiveBySend: folderGroups !== null,
     disconnectedEnvironmentIds,
     clockKey: `${nowMinute}:${snoozeWakeClock}:${inboxReturnsVersion}`,
+    titleFilter,
+    selectedAccountKey,
+    filterExemptThreadKey: threadFiltersActive ? routeRowThreadKey : null,
   });
 
   const { pinnedThreads, activeThreads, workingThreads, snoozedThreads, settledThreads } =
@@ -513,7 +540,8 @@ function useSidebarThreads(input: {
   const listedSettledThreads = settledThreads.filter(olderSettledShelf.isListed);
   useOlderSettledShelfGrowth(olderSettledShelf, listedSettledThreads);
   const settledCount =
-    settledThreads.length + olderSettledShelf.unloadedCount(partition.visibleThreads);
+    settledThreads.length +
+    (threadFiltersActive ? 0 : olderSettledShelf.unloadedCount(partition.visibleThreads));
   const visibleSettledThreads = (() => {
     const visible = listedSettledThreads.slice(0, settledVisibleCount);
     if (
@@ -637,7 +665,18 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
     disconnectedEnvironmentIds,
   } = input;
   const preciseNow = new Date().toISOString();
-  const visible = filterSidebarV2VisibleThreads(threads, scopedProjectKeys, delegatedUnderParent);
+  const inScope = filterSidebarV2VisibleThreads(
+    threads,
+    scopedProjectKeys,
+    delegatedUnderParent,
+  );
+  const visible = inScope.filter((thread) =>
+    matchesSidebarThreadFilters(thread, {
+      titleFilter: input.titleFilter,
+      accountKey: input.selectedAccountKey,
+      isOpen: threadShellKey(thread) === input.filterExemptThreadKey,
+    }),
+  );
   const inboxObservation = inboxReturns.observe(workingShelfEnabled ? threads : null);
   const pinned: EnvironmentThreadShell[] = [];
   const active: EnvironmentThreadShell[] = [];
@@ -1118,6 +1157,41 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           ),
         );
   const threads = useQuietThreadShells();
+  const accountOptions = (() => {
+    const options = new Map<string, { key: string; label: string }>();
+    for (const thread of threads) {
+      if (thread.archivedAt !== null || isSidebarSubagentThread(thread)) continue;
+      const key = sidebarThreadAccountKey(thread);
+      if (options.has(key)) continue;
+      const name =
+        providerEntriesByEnvironment.get(thread.environmentId)?.get(thread.providerInstanceId)
+          ?.displayName ?? thread.providerInstanceId;
+      const environment = environmentLabelById.get(thread.environmentId);
+      options.set(key, {
+        key,
+        label: environmentLabelById.size > 1 && environment ? `${name} · ${environment}` : name,
+      });
+    }
+    return [...options.values()].toSorted((left, right) => left.label.localeCompare(right.label));
+  })();
+  const [titleFilter, setTitleFilter] = useLocalStorage(
+    SIDEBAR_TITLE_FILTER_KEY,
+    EMPTY_SIDEBAR_TITLE_FILTER,
+    SIDEBAR_TITLE_FILTER_SCHEMA,
+  );
+  const [selectedAccountKey, setSelectedAccountKey] = useLocalStorage(
+    SIDEBAR_ACCOUNT_FILTER_KEY,
+    null as string | null,
+    SIDEBAR_ACCOUNT_FILTER_SCHEMA,
+  );
+  const titleFilterKey = isSidebarTitleFilterActive(titleFilter)
+    ? `${titleFilter.mode}:${titleFilter.text.trim().toLocaleLowerCase()}`
+    : "";
+  // A filter change can hide rows held by bulk selection, including changes from another tab.
+  // oxlint-disable-next-line t3code/react-effect-budget -- Persisted filters can change outside a sidebar event handler.
+  useEffect(() => {
+    clearSelection();
+  }, [clearSelection, selectedAccountKey, titleFilterKey]);
   const routeRowThreadKey =
     routeThreadRef === null
       ? null
@@ -1360,6 +1434,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       : null,
     keepEmptyFolders: (group) =>
       scopedProjectGroups.length > 0 || (group.pinned && !group.archived),
+    titleFilter,
+    selectedAccountKey,
   });
 
   // Ranked across environments as the palette ranks them, so one
@@ -2993,6 +3069,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           <SidebarGroup className="z-[1]">
             <SidebarThreadHeader
               hasProjects={projectGroups.length > 0}
+              titleFilter={titleFilter}
+              onTitleFilterChange={setTitleFilter}
+              accountOptions={accountOptions}
+              selectedAccountKey={selectedAccountKey}
+              onAccountChange={setSelectedAccountKey}
               projectScope={
                 <Combobox
                   items={projectScopeItems}
@@ -3631,6 +3712,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                     Add project
                   </button>
                 </>
+              ) : titleFilterKey !== "" || selectedAccountKey !== null ? (
+                "No threads match filters"
               ) : scopedProjectGroups.length > 1 ? (
                 "No threads in these projects yet"
               ) : scopedProjectGroups[0] ? (
