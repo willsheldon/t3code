@@ -11,6 +11,11 @@ import {
   hasUnseenCompletion,
   resolveSidebarRowThreadId,
   isSidebarThreadWorking,
+  isSidebarTitleFilterActive,
+  matchesSidebarThreadFilters,
+  sidebarThreadAccountKey,
+  sidebarThreadFilterButtonLabel,
+  SIDEBAR_UNAVAILABLE_ACCOUNT_LABEL,
   orderItemsByPreferredIds,
   pinOrderKeyBetween,
   resolveProjectStatusIndicator,
@@ -51,6 +56,89 @@ import {
 } from "./sidebar/routeReveal";
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
+
+describe("sidebar conversation filters", () => {
+  const thread = {
+    title: "bot-codex--review",
+    environmentId: "env-one",
+    providerInstanceId: "codex-work",
+  };
+  const noTitleFilter = { text: "", mode: "exclude" } as const;
+
+  it("matches titles case-insensitively for both modes and ignores blank text", () => {
+    const matches = (title: string, text: string, mode: "include" | "exclude") =>
+      matchesSidebarThreadFilters(
+        { ...thread, title },
+        { titleFilter: { text, mode }, accountKey: null, isOpen: false },
+      );
+
+    expect(matches("bot-codex--review", "BOT-", "exclude")).toBe(false);
+    expect(matches("Fix login", "bot-", "exclude")).toBe(true);
+    expect(matches("Fix Auth flow", "auth", "include")).toBe(true);
+    expect(matches("Fix login", "auth", "include")).toBe(false);
+    expect(matches("Fix login", "  ", "include")).toBe(true);
+    expect(matches("Fix login", " login ", "include")).toBe(true);
+    expect(isSidebarTitleFilterActive({ text: "  ", mode: "include" })).toBe(false);
+    expect(isSidebarTitleFilterActive({ text: "bot-", mode: "exclude" })).toBe(true);
+  });
+
+  it("uses the thread's provider instance and keeps environments separate", () => {
+    expect(sidebarThreadAccountKey(thread)).toBe('["env-one","codex-work"]');
+    expect(
+      matchesSidebarThreadFilters(thread, {
+        titleFilter: noTitleFilter,
+        accountKey: '["env-two","codex-work"]',
+        isOpen: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("combines title and account filters while keeping the open thread visible", () => {
+    const filters = {
+      titleFilter: { text: "bot-", mode: "exclude" },
+      accountKey: '["env-one","codex-work"]',
+      isOpen: false,
+    } as const;
+    expect(matchesSidebarThreadFilters(thread, filters)).toBe(false);
+    expect(matchesSidebarThreadFilters({ ...thread, title: "Review" }, filters)).toBe(true);
+    expect(
+      matchesSidebarThreadFilters(
+        { ...thread, title: "Review", environmentId: "env-two" },
+        filters,
+      ),
+    ).toBe(false);
+    expect(matchesSidebarThreadFilters(thread, { ...filters, isOpen: true })).toBe(true);
+  });
+
+  it("names what the trigger filters and which filters are on", () => {
+    const accountOptions = [{ key: '["env-one","codex-work"]', label: "AU" }];
+    const label = (
+      titleFilter: { text: string; mode: "include" | "exclude" },
+      selectedAccountKey: string | null,
+    ) => sidebarThreadFilterButtonLabel({ titleFilter, selectedAccountKey, accountOptions });
+
+    expect(label(noTitleFilter, null)).toBe("Filter threads by title and account");
+    expect(label({ text: " bot- ", mode: "exclude" }, null)).toBe(
+      'Filter threads by title and account: title excludes "bot-"',
+    );
+    expect(label({ text: "auth", mode: "include" }, '["env-one","codex-work"]')).toBe(
+      'Filter threads by title and account: title includes "auth", AU',
+    );
+    expect(label(noTitleFilter, '["env-one","codex-work"]')).toBe(
+      "Filter threads by title and account: AU",
+    );
+  });
+
+  it("names a dropped account the same way the menu row does", () => {
+    expect(
+      sidebarThreadFilterButtonLabel({
+        titleFilter: noTitleFilter,
+        selectedAccountKey: '["env-gone","codex-work"]',
+        accountOptions: [{ key: '["env-one","codex-work"]', label: "AU" }],
+      }),
+    ).toBe(`Filter threads by title and account: ${SIDEBAR_UNAVAILABLE_ACCOUNT_LABEL}`);
+  });
+});
 
 describe("deleteSelectedThreadEntries", () => {
   const entries = [{ threadKey: "one" }, { threadKey: "two" }, { threadKey: "three" }] as const;
