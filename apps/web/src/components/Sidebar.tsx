@@ -193,6 +193,7 @@ import {
   animateSidebarLayoutChanges,
   applySidebarThreadDrop,
   filterSidebarV2VisibleThreads,
+  isSidebarSubagentThread,
   buildBulkTitleRegenerationContextMenuItem,
   buildBulkUnpinContextMenuItem,
   deleteSelectedThreadEntries,
@@ -202,6 +203,8 @@ import {
   hasUnseenCompletion,
   isSidebarNestedLinkClick,
   isSidebarThreadWorking,
+  isSidebarTitleFilterActive,
+  matchesSidebarThreadFilters,
   isTrailingDoubleClick,
   orderItemsByPreferredIds,
   planSidebarThreadDrop,
@@ -221,6 +224,7 @@ import {
   shouldRecedeSidebarThread,
   resolveWorkingStartedAt,
   sidebarListItemId,
+  sidebarThreadAccountKey,
   sidebarMarkerId,
   sidebarThreadKeyAtY,
   sortInboxThreadsByReturn,
@@ -233,6 +237,7 @@ import {
   type SidebarListItem,
   type SidebarListMarker,
   type SidebarSection,
+  type SidebarTitleFilter,
 } from "./Sidebar.logic";
 import { resolveLocalCheckoutBranchMismatch } from "./BranchToolbar.logic";
 import {
@@ -306,6 +311,14 @@ const SETTLED_TAIL_PAGE_COUNT = 25;
 const SETTLED_SHELF_EXPANDED_KEY = "t3code:sidebar:settled-expanded";
 const SNOOZED_SHELF_EXPANDED_KEY = "t3code:sidebar:snoozed-expanded";
 const WORKING_SHELF_EXPANDED_KEY = "t3code:sidebar:working-expanded";
+const SIDEBAR_TITLE_FILTER_KEY = "t3code:sidebar:title-filter";
+const SIDEBAR_TITLE_FILTER_SCHEMA = Schema.Struct({
+  text: Schema.String,
+  mode: Schema.Literals(["include", "exclude"]),
+});
+const EMPTY_SIDEBAR_TITLE_FILTER: SidebarTitleFilter = { text: "", mode: "exclude" };
+const SIDEBAR_ACCOUNT_FILTER_KEY = "t3code:sidebar:account-filter";
+const SIDEBAR_ACCOUNT_FILTER_SCHEMA = Schema.NullOr(Schema.String);
 
 const inboxReturns = createInboxReturnTracker();
 
@@ -2378,6 +2391,25 @@ export default function Sidebar() {
       ),
     [serverConfigs],
   );
+  const accountOptions = useMemo(() => {
+    const options = new Map<string, { key: string; label: string }>();
+    for (const thread of threads) {
+      // Match the rows the sidebar can show: subagent children are hidden.
+      if (thread.archivedAt !== null || isSidebarSubagentThread(thread)) continue;
+      const key = sidebarThreadAccountKey(thread);
+      if (options.has(key)) continue;
+      const instanceId = thread.providerInstanceId;
+      const name =
+        providerEntriesByEnvironment.get(thread.environmentId)?.get(instanceId)?.displayName ??
+        instanceId;
+      const environment = environmentLabelById.get(thread.environmentId);
+      options.set(key, {
+        key,
+        label: environments.length > 1 && environment ? `${name} · ${environment}` : name,
+      });
+    }
+    return [...options.values()].toSorted((left, right) => left.label.localeCompare(right.label));
+  }, [environmentLabelById, environments.length, providerEntriesByEnvironment, threads]);
   const projectByKey = useMemo(
     () => new Map(projects.map((project) => [`${project.environmentId}:${project.id}`, project])),
     [projects],
@@ -2501,6 +2533,21 @@ export default function Sidebar() {
     projectGroupingSettings,
     setProjectScopeKey,
   ]);
+  const [titleFilter, setTitleFilter] = useLocalStorage(
+    SIDEBAR_TITLE_FILTER_KEY,
+    EMPTY_SIDEBAR_TITLE_FILTER,
+    SIDEBAR_TITLE_FILTER_SCHEMA,
+  );
+  // Blank text means no title filter whatever the mode, so a mode flip on an
+  // empty field changes nothing that depends on this key.
+  const titleFilterKey = isSidebarTitleFilterActive(titleFilter)
+    ? `${titleFilter.mode}:${titleFilter.text.trim().toLocaleLowerCase()}`
+    : "";
+  const [selectedAccountKey, setSelectedAccountKey] = useLocalStorage(
+    SIDEBAR_ACCOUNT_FILTER_KEY,
+    null as string | null,
+    SIDEBAR_ACCOUNT_FILTER_SCHEMA,
+  );
   const routeDraftIdForRows = routeTarget?.kind === "draft" ? routeTarget.draftId : null;
   const visibleDraftSessionCount = useComposerDraftStore((store) => {
     let count = 0;
@@ -2521,9 +2568,10 @@ export default function Sidebar() {
     }
     return count;
   });
+  // Filter changes drop the selection: bulk actions must never touch hidden rows.
   useEffect(() => {
     clearSelection();
-  }, [clearSelection, projectScopeKey]);
+  }, [clearSelection, projectScopeKey, selectedAccountKey, titleFilterKey]);
 
   const openProjectSettings = useStableCallback(
     (projectGroup: SidebarProjectSnapshot, projectRef?: ScopedProjectRef) => {
@@ -2574,6 +2622,8 @@ export default function Sidebar() {
     readonly keysAtDrop: ReadonlyMap<string, string | null>;
     readonly assignedKeys: ReadonlyMap<string, string>;
   } | null>(null);
+  const threadFiltersActive = titleFilterKey !== "" || selectedAccountKey !== null;
+  const filterExemptThreadKey = threadFiltersActive ? routeThreadKey : null;
   const {
     pinnedThreads,
     draggableThreadKeys,
@@ -2586,7 +2636,18 @@ export default function Sidebar() {
   } = useMemo(() => {
     void snoozeWakeTick;
     const preciseNow = new Date().toISOString();
-    const visible = filterSidebarV2VisibleThreads(threads, scopedProjectKeys);
+    const inScope = filterSidebarV2VisibleThreads(threads, scopedProjectKeys);
+    const visible = threadFiltersActive
+      ? inScope.filter((thread) =>
+          matchesSidebarThreadFilters(thread, {
+            titleFilter,
+            accountKey: selectedAccountKey,
+            isOpen:
+              scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)) ===
+              filterExemptThreadKey,
+          }),
+        )
+      : inScope;
     inboxReturns.observe(workingShelfEnabled ? threads : null);
     const pinned: EnvironmentThreadShell[] = [];
     const active: EnvironmentThreadShell[] = [];
@@ -2675,9 +2736,13 @@ export default function Sidebar() {
       snoozeNow: preciseNow,
     };
   }, [
+    filterExemptThreadKey,
+    threadFiltersActive,
+    titleFilter,
     nowMinute,
     optimisticDrop,
     scopedProjectKeys,
+    selectedAccountKey,
     serverConfigs,
     snoozeWakeTick,
     threads,
@@ -2744,7 +2809,7 @@ export default function Sidebar() {
   }, [snoozedThreads]);
 
   const [settledVisibleCount, setSettledVisibleCount] = useState(SETTLED_TAIL_INITIAL_COUNT);
-  const settledResetKey = projectScopeKey ?? "all";
+  const settledResetKey = JSON.stringify([projectScopeKey, titleFilterKey, selectedAccountKey]);
   const lastSettledResetKeyRef = useRef(settledResetKey);
   if (lastSettledResetKeyRef.current !== settledResetKey) {
     lastSettledResetKeyRef.current = settledResetKey;
@@ -4623,6 +4688,11 @@ export default function Sidebar() {
             <SidebarThreadHeader
               searchFieldRef={headerSearchRef}
               hasProjects={projectGroups.length > 0}
+              titleFilter={titleFilter}
+              onTitleFilterChange={setTitleFilter}
+              accountOptions={accountOptions}
+              selectedAccountKey={selectedAccountKey}
+              onAccountChange={setSelectedAccountKey}
               projectScope={
                 <Combobox
                   items={projectScopeItems}
@@ -5180,6 +5250,8 @@ export default function Sidebar() {
                     Add project
                   </button>
                 </>
+              ) : threadFiltersActive ? (
+                "No threads match filters"
               ) : scopedProjectGroup ? (
                 `No threads in ${scopedProjectGroup.displayName} yet`
               ) : (
