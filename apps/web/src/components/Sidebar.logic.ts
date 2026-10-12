@@ -836,25 +836,6 @@ export type SidebarThreadStatus =
   | "limited"
   | "ready";
 
-export type SidebarTitleFilterMode = "include" | "exclude";
-
-/** Case-insensitive "title contains" filter. Blank text turns it off. */
-export type SidebarTitleFilter = {
-  readonly text: string;
-  readonly mode: SidebarTitleFilterMode;
-};
-
-export function isSidebarTitleFilterActive(filter: SidebarTitleFilter): boolean {
-  return filter.text.trim() !== "";
-}
-
-function matchesSidebarTitleFilter(title: string, filter: SidebarTitleFilter): boolean {
-  const needle = filter.text.trim().toLocaleLowerCase();
-  if (needle === "") return true;
-  const contains = title.toLocaleLowerCase().includes(needle);
-  return filter.mode === "include" ? contains : !contains;
-}
-
 type SidebarFilterThread = {
   readonly title: string;
   readonly environmentId: string;
@@ -865,54 +846,11 @@ export function sidebarThreadAccountKey(thread: SidebarFilterThread): string {
   return JSON.stringify([thread.environmentId, thread.providerInstanceId]);
 }
 
-export function matchesSidebarThreadFilters(
-  thread: SidebarFilterThread,
-  filters: {
-    readonly titleFilter: SidebarTitleFilter;
-    readonly accountKey: string | null;
-    readonly isOpen: boolean;
-  },
-): boolean {
-  return (
-    filters.isOpen ||
-    (matchesSidebarTitleFilter(thread.title, filters.titleFilter) &&
-      (filters.accountKey === null || sidebarThreadAccountKey(thread) === filters.accountKey))
-  );
-}
-
 /**
- * Shown for a persisted account the current environments no longer offer, both
- * as the menu's own row and inside the trigger's name, so what a screen reader
- * hears matches what the menu shows.
+ * Shown for a stored account the current environments no longer offer: in the
+ * enhanced filter's account select, its chip, and its trigger name.
  */
 export const SIDEBAR_UNAVAILABLE_ACCOUNT_LABEL = "Unavailable account";
-
-/**
- * Accessible name for the filter trigger. It sits beside the project scope
- * trigger, whose name is "Filter threads by project", so this one has to name
- * what it filters too. The active-state dot is decorative, so the name is the
- * only place a screen reader learns a filter is on.
- */
-export function sidebarThreadFilterButtonLabel(input: {
-  readonly titleFilter: SidebarTitleFilter;
-  readonly selectedAccountKey: string | null;
-  readonly accountOptions: ReadonlyArray<{ readonly key: string; readonly label: string }>;
-}): string {
-  const active = [
-    ...(isSidebarTitleFilterActive(input.titleFilter)
-      ? [`title ${input.titleFilter.mode}s "${input.titleFilter.text.trim()}"`]
-      : []),
-    ...(input.selectedAccountKey === null
-      ? []
-      : [
-          input.accountOptions.find((option) => option.key === input.selectedAccountKey)?.label ??
-            SIDEBAR_UNAVAILABLE_ACCOUNT_LABEL,
-        ]),
-  ];
-  return active.length === 0
-    ? "Filter threads by title and account"
-    : `Filter threads by title and account: ${active.join(", ")}`;
-}
 
 export function shouldRecedeSidebarThread(input: {
   status: SidebarThreadStatus;

@@ -92,7 +92,7 @@ import { useShortcutModifierState } from "../shortcutModifierState";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { isModelPickerOpen } from "../modelPickerVisibility";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
-import { isMacPlatform } from "~/lib/utils";
+import { isMacPlatform, randomUUID } from "~/lib/utils";
 import { readLocalApi } from "../localApi";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
 import { selectProjectGroupingSettings } from "../logicalProject";
@@ -160,10 +160,7 @@ import {
   applySidebarThreadDrop,
   filterSidebarV2VisibleThreads,
   isSidebarSubagentThread,
-  isSidebarTitleFilterActive,
-  matchesSidebarThreadFilters,
   sidebarThreadAccountKey,
-  type SidebarTitleFilter,
   buildBulkTitleRegenerationContextMenuItem,
   buildBulkUnpinContextMenuItem,
   deleteSelectedThreadEntries,
@@ -194,6 +191,21 @@ import {
   type SidebarSection,
   resolveSidebarRowThreadId,
 } from "./Sidebar.logic";
+import {
+  SIDEBAR_ENHANCED_FILTER_KEY,
+  SidebarEnhancedFilterStoredSchema,
+  type SidebarTitleRule,
+  compileSidebarTitleRules,
+  initializeSidebarEnhancedFilter,
+  matchesSidebarThreadFilters,
+  warmSidebarTitleRuleCache,
+  sidebarSettledFilterCounts,
+  sidebarSettledPageThreads,
+} from "./sidebar/enhancedFilter";
+import {
+  SidebarEnhancedFilterButton,
+  SidebarEnhancedFilterChips,
+} from "./sidebar/SidebarEnhancedFilter";
 import {
   createSidebarCollisionDetection,
   createSidebarSortingStrategy,
@@ -299,14 +311,17 @@ const SETTLED_SHELF_EXPANDED_KEY = "t3code:sidebar:settled-expanded";
 const SNOOZED_SHELF_EXPANDED_KEY = "t3code:sidebar:snoozed-expanded";
 const WORKING_SHELF_EXPANDED_KEY = "t3code:sidebar:working-expanded";
 
-const SIDEBAR_TITLE_FILTER_KEY = "t3code:sidebar:title-filter";
-const SIDEBAR_TITLE_FILTER_SCHEMA = Schema.Struct({
-  text: Schema.String,
-  mode: Schema.Literals(["include", "exclude"]),
-});
-const EMPTY_SIDEBAR_TITLE_FILTER: SidebarTitleFilter = { text: "", mode: "exclude" };
 const SIDEBAR_ACCOUNT_FILTER_KEY = "t3code:sidebar:account-filter";
 const SIDEBAR_ACCOUNT_FILTER_SCHEMA = Schema.NullOr(Schema.String);
+
+/** `window.localStorage`, or null where it is missing or blocked. */
+function browserFilterStore(): Storage | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+}
 
 const inboxReturns = createInboxReturnTracker();
 
@@ -331,7 +346,8 @@ interface SidebarThreadPartitionInput {
   // on the clock, so the minute tick, the precise snooze-wake tick and the inbox
   // tracker's expiry version are inputs: a new key repartitions.
   readonly clockKey: string;
-  readonly titleFilter: SidebarTitleFilter;
+  readonly compiledTitleRules: ReturnType<typeof compileSidebarTitleRules>;
+  readonly enhancedFilterEnabled: boolean;
   readonly selectedAccountKey: string | null;
   readonly filterExemptThreadKey: string | null;
 }
@@ -389,7 +405,8 @@ function useSidebarThreads(input: {
   readonly optimisticDrop: SidebarOptimisticDrop | null;
   readonly threads: readonly EnvironmentThreadShell[];
   readonly routeRowThreadKey: string | null;
-  readonly titleFilter: SidebarTitleFilter;
+  readonly compiledTitleRules: ReturnType<typeof compileSidebarTitleRules>;
+  readonly enhancedFilterEnabled: boolean;
   readonly selectedAccountKey: string | null;
 }) {
   const {
@@ -399,7 +416,8 @@ function useSidebarThreads(input: {
     optimisticDrop,
     threads,
     routeRowThreadKey,
-    titleFilter,
+    compiledTitleRules,
+    enhancedFilterEnabled,
     selectedAccountKey,
   } = input;
   const workingShelfEnabled = useClientSettings((s) => s.sidebarWorkingShelfEnabled);
@@ -426,8 +444,12 @@ function useSidebarThreads(input: {
     Schema.Boolean,
   );
   const threadFiltersActive =
-    isSidebarTitleFilterActive(titleFilter) || selectedAccountKey !== null;
-  const settledResetKey = JSON.stringify([projectScopeKey, titleFilter, selectedAccountKey]);
+    enhancedFilterEnabled && (compiledTitleRules.liveCount > 0 || selectedAccountKey !== null);
+  const settledResetKey = JSON.stringify([
+    projectScopeKey,
+    enhancedFilterEnabled ? compiledTitleRules.liveKey : "",
+    enhancedFilterEnabled ? selectedAccountKey : null,
+  ]);
   const [settledTail, setSettledTail] = useState({
     scopeKey: settledResetKey,
     count: SETTLED_TAIL_INITIAL_COUNT,
@@ -445,7 +467,8 @@ function useSidebarThreads(input: {
     optimisticDrop,
     workingShelfEnabled,
     clockKey: `${nowMinute}:${snoozeWakeClock}:${inboxReturnsVersion}`,
-    titleFilter,
+    compiledTitleRules,
+    enhancedFilterEnabled,
     selectedAccountKey,
     filterExemptThreadKey: threadFiltersActive ? routeRowThreadKey : null,
   });
@@ -458,11 +481,13 @@ function useSidebarThreads(input: {
     expanded: settledShelfExpanded,
     visibleCount: settledVisibleCount,
   });
-  const listedSettledThreads = settledThreads.filter(olderSettledShelf.isListed);
-  useOlderSettledShelfGrowth(olderSettledShelf, listedSettledThreads);
-  const settledCount =
-    settledThreads.length +
-    (threadFiltersActive ? 0 : olderSettledShelf.unloadedCount(partition.visibleThreads));
+  const { listedThreads: listedSettledThreads, growthThreads: scannedSettledThreads } =
+    sidebarSettledPageThreads(
+      partition.scannedSettledThreads,
+      settledThreads,
+      olderSettledShelf.isListed,
+    );
+  useOlderSettledShelfGrowth(olderSettledShelf, scannedSettledThreads);
   const visibleSettledThreads = (() => {
     const visible = listedSettledThreads.slice(0, settledVisibleCount);
     if (
@@ -476,6 +501,12 @@ function useSidebarThreads(input: {
     }
     return visible.length === settledThreads.length ? settledThreads : visible;
   })();
+  const settledCounts = sidebarSettledFilterCounts({
+    matched: settledThreads.length,
+    visible: visibleSettledThreads.length,
+    unloaded: olderSettledShelf.unloadedCount(partition.inScopeThreads),
+    filtering: threadFiltersActive,
+  });
   const renderedSettledThreads = settledShelfExpanded
     ? visibleSettledThreads
     : routeThreadOnly(visibleSettledThreads, routeRowThreadKey);
@@ -514,13 +545,16 @@ function useSidebarThreads(input: {
       ...settledThreads,
     ],
     settledVisibleCount,
-    settledCount,
+    settledCount: settledCounts.count,
+    hasUnloadedSettledThreads: settledCounts.hasUnloaded,
     olderSettledShelf,
-    hiddenSettledCount: Math.max(0, settledCount - visibleSettledThreads.length),
+    hiddenSettledCount: settledCounts.hidden,
     showMoreSettled: () =>
       setSettledTail((current) => ({
         scopeKey: current.scopeKey,
-        count: current.count + SETTLED_TAIL_PAGE_COUNT,
+        count:
+          Math.max(current.count, threadFiltersActive ? scannedSettledThreads.length : 0) +
+          SETTLED_TAIL_PAGE_COUNT,
       })),
     settledShelfExpanded,
     toggleSettledShelf: () => setSettledShelfExpanded((value) => !value),
@@ -551,13 +585,28 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
   const { threads, scopedProjectKeys, serverConfigs, optimisticDrop, workingShelfEnabled } = input;
   const preciseNow = new Date().toISOString();
   const inScope = filterSidebarV2VisibleThreads(threads, scopedProjectKeys);
-  const visible = inScope.filter((thread) =>
-    matchesSidebarThreadFilters(thread, {
-      titleFilter: input.titleFilter,
-      accountKey: input.selectedAccountKey,
-      isOpen: threadShellKey(thread) === input.filterExemptThreadKey,
-    }),
-  );
+  const threadFiltersActive =
+    input.enhancedFilterEnabled &&
+    (input.compiledTitleRules.liveCount > 0 || input.selectedAccountKey !== null);
+  if (threadFiltersActive) {
+    warmSidebarTitleRuleCache(
+      input.compiledTitleRules,
+      inScope.map((thread) => thread.title),
+      browserFilterStore(),
+    );
+  }
+  const visible = threadFiltersActive
+    ? inScope.filter((thread) =>
+        matchesSidebarThreadFilters(thread, {
+          compiled: input.compiledTitleRules,
+          accountKey: input.selectedAccountKey,
+          isOpen: threadShellKey(thread) === input.filterExemptThreadKey,
+        }),
+      )
+    : inScope;
+  const visibleKeys = threadFiltersActive ? new Set(visible.map(threadShellKey)) : null;
+  const filterVisible = (list: readonly EnvironmentThreadShell[]) =>
+    visibleKeys === null ? list : list.filter((thread) => visibleKeys.has(threadShellKey(thread)));
   const inboxObservation = inboxReturns.observe(workingShelfEnabled ? threads : null);
   const pinned: EnvironmentThreadShell[] = [];
   const active: EnvironmentThreadShell[] = [];
@@ -571,13 +620,21 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
   const settled: EnvironmentThreadShell[] = [];
   const draggable = new Set<string>();
   const activeReorderable = new Set<string>();
-  for (const thread of visible) {
+  for (const thread of inScope) {
     const capabilities = serverConfigs.get(thread.environmentId)?.environment.capabilities;
     const supportsSettlement = capabilities?.threadSettlement === true;
     const supportsSnooze = capabilities?.threadSnooze === true;
     const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
-    if (capabilities?.threadActiveReorder === true) activeReorderable.add(threadKey);
-    if (capabilities?.threadPinning === true && capabilities.threadPinReorder === true) {
+    if (
+      capabilities?.threadActiveReorder === true &&
+      (visibleKeys === null || visibleKeys.has(threadKey))
+    )
+      activeReorderable.add(threadKey);
+    if (
+      capabilities?.threadPinning === true &&
+      capabilities.threadPinReorder === true &&
+      (visibleKeys === null || visibleKeys.has(threadKey))
+    ) {
       draggable.add(threadKey);
     }
     if (optimisticDrop?.key === threadKey) {
@@ -614,10 +671,10 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
     }
   }
   // Capability gates dragging only; mixed server versions must preserve the same pinned order across clients.
-  const sortedPinned = sortPinnedThreadsForSidebar(pinned);
+  const sortedPinned = sortPinnedThreadsForSidebar(filterVisible(pinned));
   const sortedActive = workingShelfEnabled
-    ? sortInboxThreadsByReturn(active, inboxObservation.returnedAt)
-    : sortThreadsForSidebar(active);
+    ? sortInboxThreadsByReturn(filterVisible(active), inboxObservation.returnedAt)
+    : sortThreadsForSidebar(filterVisible(active));
   return {
     pinnedThreads:
       optimisticDrop?.section !== "pinned" || optimisticDrop.order === null
@@ -637,14 +694,16 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
             preferredIds: optimisticDrop.order,
             getId: (thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
           }),
-    workingThreads: sortWorkingThreadsBySend(working),
-    snoozedThreads: snoozed.toSorted(
+    workingThreads: sortWorkingThreadsBySend(filterVisible(working)),
+    snoozedThreads: filterVisible(snoozed).toSorted(
       (left, right) =>
         firstValidTimestampMs(left.snoozedUntil ?? null) -
         firstValidTimestampMs(right.snoozedUntil ?? null),
     ),
-    settledThreads: sortSettledThreads(settled),
-    visibleThreads: visible,
+    settledThreads: sortSettledThreads(filterVisible(settled)),
+    scannedSettledThreads: settled,
+    inScopeThreads: inScope,
+    enhancedHiddenCount: inScope.length - visible.length,
     snoozeNow: preciseNow,
   };
 }
@@ -1024,24 +1083,40 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     }
     return [...options.values()].toSorted((left, right) => left.label.localeCompare(right.label));
   })();
-  const [titleFilter, setTitleFilter] = useLocalStorage(
-    SIDEBAR_TITLE_FILTER_KEY,
-    EMPTY_SIDEBAR_TITLE_FILTER,
-    SIDEBAR_TITLE_FILTER_SCHEMA,
+  const enhancedFilterEnabled = useClientSettings((s) => s.sidebarEnhancedFilterEnabled);
+  // Runs once, before the rules are read: drops corrupt data, migrates the old
+  // single-field filter, and turns off a regex that hung the last run.
+  const [enhancedFilterInitial] = useState(() =>
+    initializeSidebarEnhancedFilter(browserFilterStore(), randomUUID),
   );
+  const [enhancedFilter, setEnhancedFilter] = useLocalStorage(
+    SIDEBAR_ENHANCED_FILTER_KEY,
+    enhancedFilterInitial,
+    SidebarEnhancedFilterStoredSchema,
+  );
+  const titleRules = enhancedFilter.rules;
+  const compiledTitleRules = compileSidebarTitleRules(titleRules);
+  const setTitleRules = useCallback(
+    (update: (rules: ReadonlyArray<SidebarTitleRule>) => ReadonlyArray<SidebarTitleRule>) =>
+      setEnhancedFilter((current) => ({ rules: update(current.rules) })),
+    [setEnhancedFilter],
+  );
+  const [enhancedFilterOpen, setEnhancedFilterOpen] = useState(false);
   const [selectedAccountKey, setSelectedAccountKey] = useLocalStorage(
     SIDEBAR_ACCOUNT_FILTER_KEY,
     null as string | null,
     SIDEBAR_ACCOUNT_FILTER_SCHEMA,
   );
-  const titleFilterKey = isSidebarTitleFilterActive(titleFilter)
-    ? `${titleFilter.mode}:${titleFilter.text.trim().toLocaleLowerCase()}`
+  // Off means no enhanced filtering at all, account included, so nothing hidden
+  // is left applying. The stored rules and account come back when it is on.
+  const enhancedFilterKey = enhancedFilterEnabled
+    ? JSON.stringify([compiledTitleRules.liveKey, selectedAccountKey])
     : "";
-  // A filter change can hide rows held by bulk selection, including changes from another tab.
   // oxlint-disable-next-line t3code/react-effect-budget -- Persisted filters can change outside a sidebar event handler.
   useEffect(() => {
     clearSelection();
-  }, [clearSelection, selectedAccountKey, titleFilterKey]);
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- A changed filter invalidates selection even when the clear function is stable.
+  }, [clearSelection, enhancedFilterKey]);
   const routeRowThreadKey =
     routeThreadRef === null
       ? null
@@ -1177,9 +1252,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     snoozedThreads,
     settledThreads,
     snoozeNow,
+    enhancedHiddenCount,
     searchableThreads,
     settledVisibleCount,
     settledCount,
+    hasUnloadedSettledThreads,
     olderSettledShelf,
     hiddenSettledCount,
     showMoreSettled,
@@ -1208,7 +1285,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     optimisticDrop,
     threads,
     routeRowThreadKey,
-    titleFilter,
+    compiledTitleRules,
+    enhancedFilterEnabled,
     selectedAccountKey,
   });
 
@@ -1778,7 +1856,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         workingThreads.length +
         snoozedThreads.length +
         settledCount ===
-      0
+        0 &&
+      !hasUnloadedSettledThreads
     ) {
       return [];
     }
@@ -2774,11 +2853,20 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             <SidebarThreadHeader
               searchFieldRef={headerSearchRef}
               hasProjects={projectGroups.length > 0}
-              titleFilter={titleFilter}
-              onTitleFilterChange={setTitleFilter}
-              accountOptions={accountOptions}
-              selectedAccountKey={selectedAccountKey}
-              onAccountChange={setSelectedAccountKey}
+              enhancedFilter={
+                enhancedFilterEnabled ? (
+                  <SidebarEnhancedFilterButton
+                    rules={titleRules}
+                    compiled={compiledTitleRules}
+                    onRulesChange={setTitleRules}
+                    accountOptions={accountOptions}
+                    selectedAccountKey={selectedAccountKey}
+                    onAccountChange={setSelectedAccountKey}
+                    open={enhancedFilterOpen}
+                    onOpenChange={setEnhancedFilterOpen}
+                  />
+                ) : null
+              }
               projectScope={
                 <Combobox
                   items={projectScopeItems}
@@ -2921,6 +3009,18 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               activeSearchResultIndex={activeSearchResultIndex}
               onClearSearch={clearThreadSearch}
             />
+            {enhancedFilterEnabled ? (
+              <SidebarEnhancedFilterChips
+                rules={titleRules}
+                compiled={compiledTitleRules}
+                onRulesChange={setTitleRules}
+                accountOptions={accountOptions}
+                selectedAccountKey={selectedAccountKey}
+                onAccountChange={setSelectedAccountKey}
+                hiddenCount={enhancedHiddenCount}
+                onOpenFilter={() => setEnhancedFilterOpen(true)}
+              />
+            ) : null}
           </SidebarGroup>
         }
       >
@@ -3269,7 +3369,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                       }
                       return items;
                     })()}
-                    {settledShelfExpanded && hiddenSettledCount > 0 ? (
+                    {settledShelfExpanded &&
+                    (hiddenSettledCount > 0 || hasUnloadedSettledThreads) ? (
                       <li className="list-none">
                         <button
                           type="button"
@@ -3290,7 +3391,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                             ? "Loading"
                             : olderSettledShelf.failed
                               ? "Could not load older threads. Retry"
-                              : `Show ${Math.min(hiddenSettledCount, SETTLED_TAIL_PAGE_COUNT)} more`}
+                              : hasUnloadedSettledThreads
+                                ? "Show more"
+                                : `Show ${Math.min(hiddenSettledCount, SETTLED_TAIL_PAGE_COUNT)} more`}
                         </button>
                       </li>
                     ) : null}
@@ -3306,7 +3409,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             workingThreads.length +
             snoozedThreads.length +
             settledCount ===
-            0 ? (
+            0 &&
+          !hasUnloadedSettledThreads ? (
             <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">
               {projects.length === 0 ? (
                 <>
@@ -3320,7 +3424,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                     Add project
                   </button>
                 </>
-              ) : titleFilterKey !== "" || selectedAccountKey !== null ? (
+              ) : enhancedFilterEnabled &&
+                (compiledTitleRules.liveCount > 0 || selectedAccountKey !== null) ? (
                 "No threads match filters"
               ) : scopedProjectGroup ? (
                 `No threads in ${scopedProjectGroup.displayName} yet`
