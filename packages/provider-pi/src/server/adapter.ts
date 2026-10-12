@@ -1868,6 +1868,25 @@ export const makePiAdapterV2 = Effect.fn("makePiAdapterV2")(function* (
         yield* connection.terminate;
       });
 
+      // oh-my-pi (omp) ends a turn with `session_settled`, which has no
+      // `aborted` field; the `prompt_result` before it carries the outcome.
+      // The event pump rewrites it as `agent_settled` before dispatch, so wake
+      // buffers hold the alias and their replay leaves this state alone.
+      let lastPromptResultStatus: string | undefined;
+      const asPiSettledEvent = (event: PiRpcRecord): PiRpcRecord => {
+        if (event["type"] === "prompt_result") {
+          lastPromptResultStatus = recordString(event, "status");
+          return event;
+        }
+        if (event["type"] !== "session_settled") return event;
+        const aborted =
+          typeof event["aborted"] === "boolean"
+            ? event["aborted"]
+            : lastPromptResultStatus === "aborted";
+        lastPromptResultStatus = undefined;
+        return { ...event, type: "agent_settled", aborted };
+      };
+
       const handleSessionEvent = Effect.fnUntraced(function* (event: PiRpcRecord) {
         if (event["type"] === "t3.extension_status_reset") {
           const reset = extensionStatusReset;
@@ -2394,7 +2413,7 @@ export const makePiAdapterV2 = Effect.fn("makePiAdapterV2")(function* (
                   releasedPromptTurnId = held.providerTurnId;
                 }
               }
-              yield* handleSessionEvent(event).pipe(
+              yield* handleSessionEvent(asPiSettledEvent(event)).pipe(
                 Effect.ensuring(Effect.sync(() => (releasedPromptTurnId = null))),
               );
             }),
