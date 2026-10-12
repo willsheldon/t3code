@@ -10,7 +10,8 @@
  * `nativeThreadRef`, so a thread started in T3 can be resumed from the TUI
  * and vice versa.
  *
- * Turn lifecycle: `agent_settled` is the only terminal signal. `agent_end`
+ * Turn lifecycle: `agent_settled` (or oh-my-pi's `session_settled`, which
+ * the adapter treats as the same event) is the only terminal signal. `agent_end`
  * merely closes one low-level run — compaction retries, auto-retries, and
  * queued continuations may still follow it, so the turn stays open until Pi
  * reports the session settled. An extension can start detached compaction as
@@ -1762,6 +1763,25 @@ export const makePiAdapterV2 = Effect.fn("makePiAdapterV2")(function* (
         yield* connection.terminate;
       });
 
+      // oh-my-pi (omp) ends a turn with `session_settled`, which has no
+      // `aborted` field; the `prompt_result` before it carries the outcome.
+      // The event pump rewrites it as `agent_settled` before dispatch, so wake
+      // buffers hold the alias and their replay leaves this state alone.
+      let lastPromptResultStatus: string | undefined;
+      const asPiSettledEvent = (event: PiRpcRecord): PiRpcRecord => {
+        if (event["type"] === "prompt_result") {
+          lastPromptResultStatus = recordString(event, "status");
+          return event;
+        }
+        if (event["type"] !== "session_settled") return event;
+        const aborted =
+          typeof event["aborted"] === "boolean"
+            ? event["aborted"]
+            : lastPromptResultStatus === "aborted";
+        lastPromptResultStatus = undefined;
+        return { ...event, type: "agent_settled", aborted };
+      };
+
       const handleSessionEvent = Effect.fnUntraced(function* (event: PiRpcRecord) {
         // Model-selection hooks can await a dialog before startTurn can claim
         // a wake. Keep interactive requests session-scoped until a turn owns
@@ -2234,7 +2254,7 @@ export const makePiAdapterV2 = Effect.fn("makePiAdapterV2")(function* (
       yield* Effect.gen(function* () {
         while (true) {
           const event = yield* Queue.take(connection.events);
-          yield* sessionEventPermit.withPermits(1)(handleSessionEvent(event));
+          yield* sessionEventPermit.withPermits(1)(handleSessionEvent(asPiSettledEvent(event)));
         }
       }).pipe(
         Effect.catchCause((cause) =>
