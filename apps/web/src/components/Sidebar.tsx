@@ -3090,7 +3090,14 @@ export default function Sidebar() {
   // filter context changes so a scope/search flip never inherits a deep
   // page state.
   const [settledVisibleCount, setSettledVisibleCount] = useState(SETTLED_TAIL_INITIAL_COUNT);
-  const settledResetKey = JSON.stringify([projectScopeKey, enhancedFilterKey]);
+  // Built from the stored rules rather than enhancedFilterKey: a key that goes
+  // through a helper call here makes React Compiler drop several memos.
+  const settledResetKey = JSON.stringify([
+    projectScopeKey,
+    enhancedFilterEnabled,
+    titleRules,
+    selectedAccountKey,
+  ]);
   const lastSettledResetKeyRef = useRef(settledResetKey);
   if (lastSettledResetKeyRef.current !== settledResetKey) {
     lastSettledResetKeyRef.current = settledResetKey;
