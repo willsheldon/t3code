@@ -124,7 +124,7 @@ import { useShortcutModifierState } from "../shortcutModifierState";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { isModelPickerOpen } from "../modelPickerVisibility";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
-import { isMacPlatform } from "~/lib/utils";
+import { isMacPlatform, randomUUID } from "~/lib/utils";
 import { useOpenPrLink } from "../lib/openPullRequestLink";
 import { readLocalApi } from "../localApi";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
@@ -202,8 +202,6 @@ import {
   hasUnseenCompletion,
   isSidebarNestedLinkClick,
   isSidebarThreadWorking,
-  isSidebarTitleFilterActive,
-  matchesSidebarThreadFilters,
   isTrailingDoubleClick,
   orderItemsByPreferredIds,
   planSidebarThreadDrop,
@@ -236,8 +234,20 @@ import {
   type SidebarListItem,
   type SidebarListMarker,
   type SidebarSection,
-  type SidebarTitleFilter,
 } from "./Sidebar.logic";
+import {
+  SIDEBAR_ENHANCED_FILTER_KEY,
+  SidebarEnhancedFilterStoredSchema,
+  type SidebarTitleRule,
+  compileSidebarTitleRules,
+  initializeSidebarEnhancedFilter,
+  matchesSidebarThreadFilters,
+  warmSidebarTitleRuleCache,
+} from "./sidebar/enhancedFilter";
+import {
+  SidebarEnhancedFilterButton,
+  SidebarEnhancedFilterChips,
+} from "./sidebar/SidebarEnhancedFilter";
 import { resolveLocalCheckoutBranchMismatch } from "./BranchToolbar.logic";
 import {
   createSidebarCollisionDetection,
@@ -312,14 +322,17 @@ const SETTLED_TAIL_PAGE_COUNT = 25;
 const SETTLED_SHELF_EXPANDED_KEY = "t3code:sidebar:settled-expanded";
 const SNOOZED_SHELF_EXPANDED_KEY = "t3code:sidebar:snoozed-expanded";
 const WORKING_SHELF_EXPANDED_KEY = "t3code:sidebar:working-expanded";
-const SIDEBAR_TITLE_FILTER_KEY = "t3code:sidebar:title-filter";
-const SIDEBAR_TITLE_FILTER_SCHEMA = Schema.Struct({
-  text: Schema.String,
-  mode: Schema.Literals(["include", "exclude"]),
-});
-const EMPTY_SIDEBAR_TITLE_FILTER: SidebarTitleFilter = { text: "", mode: "exclude" };
 const SIDEBAR_ACCOUNT_FILTER_KEY = "t3code:sidebar:account-filter";
 const SIDEBAR_ACCOUNT_FILTER_SCHEMA = Schema.NullOr(Schema.String);
+
+/** `window.localStorage`, or null where it is missing or blocked. */
+function browserFilterStore(): Storage | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+}
 
 // Working beta: when this client saw each thread leave the Working shelf.
 // Module scope keeps the inbox order across routes that unmount the sidebar.
@@ -2736,21 +2749,36 @@ export default function Sidebar() {
     projectGroupingSettings,
     setProjectScopeKey,
   ]);
-  const [titleFilter, setTitleFilter] = useLocalStorage(
-    SIDEBAR_TITLE_FILTER_KEY,
-    EMPTY_SIDEBAR_TITLE_FILTER,
-    SIDEBAR_TITLE_FILTER_SCHEMA,
+  const enhancedFilterEnabled = useClientSettings((s) => s.sidebarEnhancedFilterEnabled);
+  // Runs once, before the rules are read: drops corrupt data, migrates the old
+  // single-field filter, and turns off a regex that hung the last run.
+  const [enhancedFilterInitial] = useState(() =>
+    initializeSidebarEnhancedFilter(browserFilterStore(), randomUUID),
   );
-  // Blank text means no title filter whatever the mode, so a mode flip on an
-  // empty field changes nothing that depends on this key.
-  const titleFilterKey = isSidebarTitleFilterActive(titleFilter)
-    ? `${titleFilter.mode}:${titleFilter.text.trim().toLocaleLowerCase()}`
-    : "";
+  const [enhancedFilter, setEnhancedFilter] = useLocalStorage(
+    SIDEBAR_ENHANCED_FILTER_KEY,
+    enhancedFilterInitial,
+    SidebarEnhancedFilterStoredSchema,
+  );
+  const titleRules = enhancedFilter.rules;
+  const compiledTitleRules = useMemo(() => compileSidebarTitleRules(titleRules), [titleRules]);
+  const setTitleRules = useCallback(
+    (update: (rules: ReadonlyArray<SidebarTitleRule>) => ReadonlyArray<SidebarTitleRule>) =>
+      setEnhancedFilter((current) => ({ rules: update(current.rules) })),
+    [setEnhancedFilter],
+  );
+  const [enhancedFilterOpen, setEnhancedFilterOpen] = useState(false);
   const [selectedAccountKey, setSelectedAccountKey] = useLocalStorage(
     SIDEBAR_ACCOUNT_FILTER_KEY,
     null as string | null,
     SIDEBAR_ACCOUNT_FILTER_SCHEMA,
   );
+  // Off means no enhanced filtering at all, account included, so nothing hidden
+  // is left applying. The stored rules and account come back when it is on.
+  const effectiveAccountKey = enhancedFilterEnabled ? selectedAccountKey : null;
+  const enhancedFilterKey = enhancedFilterEnabled
+    ? JSON.stringify([compiledTitleRules.liveKey, selectedAccountKey])
+    : "";
   // Count-only subscription: the parent needs "are there draft rows" for the
   // empty state, while SidebarDraftBlock owns the per-keystroke content
   // subscription. Selecting a number keeps typing in a draft composer from
@@ -2780,7 +2808,7 @@ export default function Sidebar() {
   // Filter changes drop the selection: bulk actions must never touch hidden rows.
   useEffect(() => {
     clearSelection();
-  }, [clearSelection, projectScopeKey, selectedAccountKey, titleFilterKey]);
+  }, [clearSelection, projectScopeKey, enhancedFilterKey]);
 
   const openProjectSettings = useCallback(
     (projectGroup: SidebarProjectSnapshot, projectRef?: ScopedProjectRef) => {
@@ -2838,7 +2866,8 @@ export default function Sidebar() {
         override holds until all of them appear in canonical state. */
     readonly assignedKeys: ReadonlyMap<string, string>;
   } | null>(null);
-  const threadFiltersActive = titleFilterKey !== "" || selectedAccountKey !== null;
+  const threadFiltersActive =
+    enhancedFilterEnabled && (compiledTitleRules.liveCount > 0 || selectedAccountKey !== null);
   const filterExemptThreadKey = threadFiltersActive ? routeThreadKey : null;
   const {
     pinnedThreads,
@@ -2849,6 +2878,7 @@ export default function Sidebar() {
     snoozedThreads,
     settledThreads,
     snoozeNow,
+    enhancedHiddenCount,
   } = useMemo(() => {
     // Snooze classification uses a REAL clock, not the quantized minute:
     // wake times are second-precise and a woken thread must not linger on
@@ -2859,11 +2889,18 @@ export default function Sidebar() {
     // Subagent child threads live in the parent's Agents surface, not the
     // sidebar roster (v2 models them as real threads with lineage).
     const inScope = filterSidebarV2VisibleThreads(threads, scopedProjectKeys);
+    if (threadFiltersActive) {
+      warmSidebarTitleRuleCache(
+        compiledTitleRules,
+        inScope.map((thread) => thread.title),
+        browserFilterStore(),
+      );
+    }
     const visible = threadFiltersActive
       ? inScope.filter((thread) =>
           matchesSidebarThreadFilters(thread, {
-            titleFilter,
-            accountKey: selectedAccountKey,
+            compiled: compiledTitleRules,
+            accountKey: effectiveAccountKey,
             isOpen:
               scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)) ===
               filterExemptThreadKey,
@@ -2968,15 +3005,16 @@ export default function Sidebar() {
       ),
       settledThreads: sortSettledThreads(settled),
       snoozeNow: preciseNow,
+      enhancedHiddenCount: inScope.length - visible.length,
     };
   }, [
     filterExemptThreadKey,
     threadFiltersActive,
-    titleFilter,
+    compiledTitleRules,
     nowMinute,
     optimisticDrop,
     scopedProjectKeys,
-    selectedAccountKey,
+    effectiveAccountKey,
     serverConfigs,
     snoozeWakeTick,
     threads,
@@ -3052,7 +3090,7 @@ export default function Sidebar() {
   // filter context changes so a scope/search flip never inherits a deep
   // page state.
   const [settledVisibleCount, setSettledVisibleCount] = useState(SETTLED_TAIL_INITIAL_COUNT);
-  const settledResetKey = JSON.stringify([projectScopeKey, titleFilterKey, selectedAccountKey]);
+  const settledResetKey = JSON.stringify([projectScopeKey, enhancedFilterKey]);
   const lastSettledResetKeyRef = useRef(settledResetKey);
   if (lastSettledResetKeyRef.current !== settledResetKey) {
     lastSettledResetKeyRef.current = settledResetKey;
@@ -5090,11 +5128,20 @@ export default function Sidebar() {
             <SidebarThreadHeader
               searchFieldRef={headerSearchRef}
               hasProjects={projectGroups.length > 0}
-              titleFilter={titleFilter}
-              onTitleFilterChange={setTitleFilter}
-              accountOptions={accountOptions}
-              selectedAccountKey={selectedAccountKey}
-              onAccountChange={setSelectedAccountKey}
+              enhancedFilter={
+                enhancedFilterEnabled ? (
+                  <SidebarEnhancedFilterButton
+                    rules={titleRules}
+                    compiled={compiledTitleRules}
+                    onRulesChange={setTitleRules}
+                    accountOptions={accountOptions}
+                    selectedAccountKey={selectedAccountKey}
+                    onAccountChange={setSelectedAccountKey}
+                    open={enhancedFilterOpen}
+                    onOpenChange={setEnhancedFilterOpen}
+                  />
+                ) : null
+              }
               projectScope={
                 <Combobox
                   items={projectScopeItems}
@@ -5245,6 +5292,18 @@ export default function Sidebar() {
               activeSearchResultIndex={activeSearchResultIndex}
               onClearSearch={clearThreadSearch}
             />
+            {enhancedFilterEnabled ? (
+              <SidebarEnhancedFilterChips
+                rules={titleRules}
+                compiled={compiledTitleRules}
+                onRulesChange={setTitleRules}
+                accountOptions={accountOptions}
+                selectedAccountKey={selectedAccountKey}
+                onAccountChange={setSelectedAccountKey}
+                hiddenCount={enhancedHiddenCount}
+                onOpenFilter={() => setEnhancedFilterOpen(true)}
+              />
+            ) : null}
           </SidebarGroup>
         }
       >
