@@ -223,16 +223,16 @@ export function SidebarEnhancedFilterButton({
 }) {
   const inputs = useRef(new Map<string, HTMLInputElement>());
   const addButtonRef = useRef<HTMLButtonElement>(null);
-  // A rule id, "add" for the add button, or null when nothing is pending.
-  const [focusTarget, setFocusTarget] = useState<string | null>(null);
+  // A rule id, "add" for the add button, or null. A ref, not state: the rule
+  // change that goes with it already re-renders, and focus follows that commit.
+  const pendingFocusRef = useRef<string | null>(null);
   useEffect(() => {
-    if (focusTarget === null) return;
-    const element = focusTarget === "add" ? addButtonRef.current : inputs.current.get(focusTarget);
-    // The rule list and this target update in the same render, so the new row
-    // is mounted by now; a stale target is dropped either way.
+    const target = pendingFocusRef.current;
+    if (target === null) return;
+    pendingFocusRef.current = null;
+    const element = target === "add" ? addButtonRef.current : inputs.current.get(target);
     element?.focus();
-    setFocusTarget(null);
-  }, [focusTarget]);
+  });
 
   const badgeCount = sidebarEnhancedFilterBadgeCount(compiled, selectedAccountKey);
   const atLimit = rules.length >= SIDEBAR_TITLE_RULE_LIMIT;
@@ -250,10 +250,10 @@ export function SidebarEnhancedFilterButton({
   const insertAfter = (afterId: string | null) => {
     const id = randomUUID();
     onRulesChange((current) => insertSidebarTitleRule(current, afterId, newSidebarTitleRule(id)));
-    setFocusTarget(id);
+    pendingFocusRef.current = id;
   };
   const remove = (id: string) => {
-    setFocusTarget(sidebarTitleRuleFocusAfterRemoval(rules, id) ?? "add");
+    pendingFocusRef.current = sidebarTitleRuleFocusAfterRemoval(rules, id) ?? "add";
     onRulesChange((current) => removeSidebarTitleRule(current, id));
   };
 
