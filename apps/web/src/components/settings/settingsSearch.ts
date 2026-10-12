@@ -456,6 +456,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["usage quota rate limit reset recover continue"],
   },
   {
+    id: "enhanced-thread-filter",
+    title: "Enhanced thread filter",
+    to: "/settings/general",
+    searchTerms: ["sidebar filter regex regular expression title rules hide only account bots"],
+  },
+  {
     id: "working-shelf",
     title: "Working section",
     to: "/settings/general",
