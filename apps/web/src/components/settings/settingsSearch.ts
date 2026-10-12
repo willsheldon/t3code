@@ -323,6 +323,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["hide fold running monitoring threads inbox sidebar shelf"],
   },
   {
+    id: "enhanced-thread-filter",
+    title: "Enhanced thread filter",
+    to: "/settings/general",
+    searchTerms: ["sidebar filter regex regular expression title rules hide only account bots"],
+  },
+  {
     id: "auto-settle-inactive-threads",
     title: "Auto-settle inactive threads",
     to: "/settings/general",
