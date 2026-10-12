@@ -1241,6 +1241,36 @@ describe("PiAdapterV2", () => {
   );
 
   it.effect.each([
+    { status: "completed", expected: "completed" },
+    { status: "aborted", expected: "interrupted" },
+  ] as const)(
+    "settles an oh-my-pi turn on session_settled, prompt_result status=$status",
+    ({ status, expected }) =>
+      Effect.gen(function* () {
+        const fake = yield* makeFakePi;
+        const { runtime, takeEvent } = yield* openRuntime(fake);
+        const providerThread = yield* runtime.ensureThread({
+          threadId: THREAD_ID,
+          modelSelection: modelSelection("default"),
+          runtimePolicy,
+        });
+        yield* startTurn(runtime, providerThread);
+        yield* fake.takeRequest("prompt");
+        yield* fake.emit({ type: "agent_start" });
+        yield* fake.emit({ type: "agent_end", messages: [] });
+        yield* fake.emit({
+          type: "prompt_result",
+          agentInvoked: true,
+          status,
+          sessionSettled: true,
+        });
+        yield* fake.emit({ type: "session_settled" });
+        const terminal = yield* takeEvent((event) => event.type === "turn.terminal");
+        assert.isTrue(terminal.type === "turn.terminal" && terminal.status === expected);
+      }).pipe(Effect.scoped, Effect.provide(layerTest)),
+  );
+
+  it.effect.each([
     { aborted: false, resumes: false, expected: "completed" },
     { aborted: true, resumes: false, expected: "interrupted" },
     { aborted: true, resumes: true, expected: "completed" },
@@ -1297,6 +1327,55 @@ describe("PiAdapterV2", () => {
           1,
         );
       }).pipe(Effect.scoped, Effect.provide(layerTest)),
+  );
+
+  it.effect("settles an oh-my-pi wake without leaking its abort into the next turn", () =>
+    Effect.gen(function* () {
+      const fake = yield* makeFakePi;
+      const offers =
+        yield* Queue.unbounded<ProviderContinuationRequests.ProviderContinuationRequest>();
+      const { runtime, takeEvent } = yield* openRuntime(
+        fake,
+        "default",
+        THREAD_ID,
+        SESSION_ID,
+        undefined,
+        {
+          offer: (request) => Queue.offer(offers, request).pipe(Effect.asVoid),
+        },
+      );
+      const providerThread = yield* runtime.ensureThread({
+        threadId: THREAD_ID,
+        modelSelection: modelSelection("default"),
+        runtimePolicy,
+      });
+      yield* fake.emit({ type: "agent_start" });
+      yield* Queue.take(offers);
+      yield* fake.emit({
+        type: "prompt_result",
+        agentInvoked: true,
+        status: "aborted",
+        sessionSettled: true,
+      });
+      yield* fake.emit({ type: "session_settled" });
+      yield* takeEvent(
+        (event) =>
+          event.type === "provider_session.updated" && event.providerSession.status === "ready",
+      );
+      yield* startTurn(runtime, providerThread, "default", [], "/hello");
+      yield* fake.takeRequest("prompt");
+      yield* fake.emit({ type: "response", command: "prompt", success: true });
+      const wakeTerminal = yield* takeEvent((event) => event.type === "turn.terminal");
+      assert.isTrue(wakeTerminal.type === "turn.terminal" && wakeTerminal.status === "interrupted");
+
+      yield* startTurn(runtime, providerThread, "default", [], "Hello pi", undefined, 2);
+      yield* fake.takeRequest("prompt");
+      yield* fake.emit({ type: "agent_start" });
+      yield* fake.emit({ type: "agent_end", messages: [] });
+      yield* fake.emit({ type: "session_settled" });
+      const terminal = yield* takeEvent((event) => event.type === "turn.terminal");
+      assert.isTrue(terminal.type === "turn.terminal" && terminal.status === "completed");
+    }).pipe(Effect.scoped, Effect.provide(layerTest)),
   );
 
   it.effect("keeps a pending wake on its thread and lets Stop retire its process", () =>
