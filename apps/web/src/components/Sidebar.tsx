@@ -448,6 +448,7 @@ function routeThreadOnly(
 // Separate hooks cache maps independently of later Sidebar hooks and preserve dnd-kit inputs.
 function useSidebarThreads(input: {
   readonly projectScopeKey: string | null;
+  readonly titleRules: ReadonlyArray<SidebarTitleRule>;
   readonly scopedProjectKeys: ReadonlySet<string> | null;
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
   readonly connectedEnvironmentIds: readonly EnvironmentId[];
@@ -465,6 +466,7 @@ function useSidebarThreads(input: {
 }) {
   const {
     projectScopeKey,
+    titleRules,
     scopedProjectKeys,
     serverConfigs,
     connectedEnvironmentIds,
@@ -520,10 +522,12 @@ function useSidebarThreads(input: {
   const setProjectExpanded = useUiStateStore((store) => store.setProjectExpanded);
   const threadFiltersActive =
     enhancedFilterEnabled && (compiledTitleRules.liveCount > 0 || selectedAccountKey !== null);
+  // Use stored rules directly so the compiler can cache paging independently of compiled matchers.
   const settledResetKey = JSON.stringify([
     projectScopeKey,
-    enhancedFilterEnabled ? compiledTitleRules.liveKey : "",
-    enhancedFilterEnabled ? selectedAccountKey : null,
+    enhancedFilterEnabled,
+    titleRules,
+    selectedAccountKey,
   ]);
   const [settledTail, setSettledTail] = useState({
     scopeKey: settledResetKey,
@@ -1238,11 +1242,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   );
   const titleRules = enhancedFilter.rules;
   const compiledTitleRules = compileSidebarTitleRules(titleRules);
-  const setTitleRules = useCallback(
-    (update: (rules: ReadonlyArray<SidebarTitleRule>) => ReadonlyArray<SidebarTitleRule>) =>
-      setEnhancedFilter((current) => ({ rules: update(current.rules) })),
-    [setEnhancedFilter],
-  );
+  const setTitleRules = (
+    update: (rules: ReadonlyArray<SidebarTitleRule>) => ReadonlyArray<SidebarTitleRule>,
+  ) => setEnhancedFilter((current) => ({ rules: update(current.rules) }));
   const [enhancedFilterOpen, setEnhancedFilterOpen] = useState(false);
   const [selectedAccountKey, setSelectedAccountKey] = useLocalStorage(
     SIDEBAR_ACCOUNT_FILTER_KEY,
@@ -1256,6 +1258,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     : "";
   // oxlint-disable-next-line t3code/react-effect-budget -- Persisted filters can change outside a sidebar event handler.
   useEffect(() => {
+    void enhancedFilterKey;
     clearSelection();
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- A changed filter invalidates selection even when the clear function is stable.
   }, [clearSelection, enhancedFilterKey]);
@@ -1488,6 +1491,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     activeKeysById,
   } = useSidebarThreads({
     projectScopeKey,
+    titleRules,
     scopedProjectKeys,
     serverConfigs,
     connectedEnvironmentIds,
