@@ -370,3 +370,12 @@ describe("server model preferences", () => {
     expect(decodeServerSettingsPatch(input)).toEqual(input);
   });
 });
+
+describe("ClientSettings enhanced sidebar filter", () => {
+  it("defaults on and keeps an explicit off", () => {
+    expect(decodeClientSettings({}).sidebarEnhancedFilterEnabled).toBe(true);
+    expect(
+      decodeClientSettings({ sidebarEnhancedFilterEnabled: false }).sidebarEnhancedFilterEnabled,
+    ).toBe(false);
+  });
+});

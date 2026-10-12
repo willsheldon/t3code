@@ -410,6 +410,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["redesign look style sidebar composer black quieter classic"],
   },
   {
+    id: "enhanced-thread-filter",
+    title: "Enhanced thread filter",
+    to: "/settings/general",
+    searchTerms: ["sidebar filter regex regular expression title rules hide only account bots"],
+  },
+  {
     id: "working-shelf",
     title: "Working section",
     to: "/settings/general",

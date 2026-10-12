@@ -436,6 +436,10 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.sidebarProjectSortOrder !== DEFAULT_UNIFIED_SETTINGS.sidebarProjectSortOrder
       ? ["Project order"]
       : []),
+    ...(settings.sidebarEnhancedFilterEnabled !==
+    DEFAULT_UNIFIED_SETTINGS.sidebarEnhancedFilterEnabled
+      ? ["Enhanced thread filter"]
+      : []),
     ...(settings.sidebarWorkingShelfEnabled !== DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled
       ? ["Working section"]
       : []),
@@ -607,6 +611,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
       sidebarProjectSortOrder: DEFAULT_UNIFIED_SETTINGS.sidebarProjectSortOrder,
       sidebarWorkingShelfEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled,
+      sidebarEnhancedFilterEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarEnhancedFilterEnabled,
       sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
       sidebarAutoSettleKeepPullRequests: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleKeepPullRequests,
       sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
@@ -871,6 +876,33 @@ export function GeneralSettingsPanel() {
                 updateSettings({ sidebarWorkingShelfEnabled: Boolean(checked) })
               }
               aria-label="Working section"
+            />
+          }
+        />
+        <SettingsRow
+          {...searchableSetting("enhanced-thread-filter")}
+          description="Add a filter button beside search that hides or shows threads by title rules, including regular expressions, and by account."
+          resetAction={
+            settings.sidebarEnhancedFilterEnabled !==
+            DEFAULT_UNIFIED_SETTINGS.sidebarEnhancedFilterEnabled ? (
+              <SettingResetButton
+                label="enhanced thread filter"
+                onClick={() =>
+                  updateSettings({
+                    sidebarEnhancedFilterEnabled:
+                      DEFAULT_UNIFIED_SETTINGS.sidebarEnhancedFilterEnabled,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.sidebarEnhancedFilterEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ sidebarEnhancedFilterEnabled: Boolean(checked) })
+              }
+              aria-label="Enhanced thread filter"
             />
           }
         />
