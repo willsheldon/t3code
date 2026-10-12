@@ -191,21 +191,37 @@ The linked pull request participates in automatic settlement.
 
 ## Filter the thread list
 
-On web and desktop, the filter button beside the sidebar search narrows the list
-two ways, and you can use both at once.
+On web and desktop, the enhanced filter button (the sliders icon beside the
+sidebar search) narrows the list by thread title and by account. It is separate
+from the project filter.
 
-- **Title** keeps or drops threads by what their title contains. Type some text,
-  then choose **Exclude matches** to hide those threads or **Only show matches**
-  to hide everything else. Matching ignores letter case. Leave the field empty
-  to turn the title filter off.
-- **Account** keeps only the threads that run on one account. The same
-  account on two machines is listed separately, with the machine named beside it.
+- **Title rules.** Add up to 20 rules. Each rule either hides threads whose
+  title matches, or only shows threads that match. Turn on **.\*** to use a
+  regular expression instead of plain text. Matching ignores letter case. A
+  thread shows when it matches no Hide rule and, if you have any Only rules, at
+  least one of them.
+- **Account** keeps only the threads that run on one account. The same account
+  on two machines is listed separately, with the machine named beside it.
+
+Press Enter in a rule to add another below it. Press Backspace in an empty rule
+to remove it. Each rule has a switch, so you can turn it off without deleting it.
+
+While a filter is set, chips under the search field show each rule and the
+account. Click a rule's chip to turn it off or on, or click its x to remove it.
+The end of the row shows how many threads are hidden. **Clear all** in the
+filter removes every rule and the account filter.
 
 Search and the section counts follow the filters. The thread you have open stays
 visible even when a filter would hide it, so you never lose your place. Your
-choices are remembered on this device until you change them. Choose **Clear
-filters** to see everything again. If the selected account is no longer
+rules are remembered on this device. If the selected account is no longer
 available, it appears as **Unavailable account** until you clear it.
+
+If a regular expression is invalid, the rule shows the error and has no effect.
+If a regular expression makes the sidebar unresponsive, that rule is turned off
+and marked the next time T3 Code starts, so the sidebar always recovers.
+
+To hide the enhanced filter, turn off **Settings → General → Enhanced thread
+filter**. Your rules are kept and come back when you turn it on again.
 
 ## Find and reference work
 
