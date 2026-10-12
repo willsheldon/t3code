@@ -132,6 +132,15 @@ describe("ClientSettings rich text composer", () => {
   });
 });
 
+describe("ClientSettings enhanced sidebar filter", () => {
+  it("defaults on and keeps an explicit off", () => {
+    expect(decodeClientSettings({}).sidebarEnhancedFilterEnabled).toBe(true);
+    expect(
+      decodeClientSettings({ sidebarEnhancedFilterEnabled: false }).sidebarEnhancedFilterEnabled,
+    ).toBe(false);
+  });
+});
+
 describe("ServerSettings default permissions", () => {
   it("keeps full access for settings saved before a default was configured", () => {
     expect(decodeServerSettings({}).defaultRuntimeMode).toBe("full-access");
