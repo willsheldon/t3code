@@ -407,3 +407,26 @@ export const sidebarEnhancedFilterBadgeCount = (
 /** Whether the chip row has anything to show, including rules that are off or invalid. */
 export const hasSidebarEnhancedFilterContent = (rules: Rules, accountKey: string | null): boolean =>
   accountKey !== null || rules.some((rule) => rule.pattern.trim() !== "");
+
+// Unloaded history has no titles to match yet; keep its shelf reachable without counting it as matches.
+export function sidebarSettledFilterCounts(input: {
+  readonly matched: number;
+  readonly visible: number;
+  readonly unloaded: number;
+  readonly filtering: boolean;
+}) {
+  const count = input.matched + (input.filtering ? 0 : input.unloaded);
+  return {
+    count,
+    hidden: Math.max(0, count - input.visible),
+    hasUnloaded: input.filtering && input.unloaded > 0,
+  };
+}
+
+export function sidebarSettledPageThreads<T>(
+  scanned: readonly T[],
+  matched: readonly T[],
+  isListed: (thread: T) => boolean,
+) {
+  return { listedThreads: matched.filter(isListed), growthThreads: scanned.filter(isListed) };
+}

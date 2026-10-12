@@ -1,3 +1,5 @@
+import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
+import { wantedOlderSettledPages } from "@t3tools/client-runtime/state/threads";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
@@ -10,6 +12,8 @@ import {
   type SidebarFilterStore,
   type SidebarTitleRule,
   compileSidebarTitleRules,
+  sidebarSettledFilterCounts,
+  sidebarSettledPageThreads,
   hasSidebarEnhancedFilterContent,
   initializeSidebarEnhancedFilter,
   insertSidebarTitleRule,
@@ -386,5 +390,79 @@ describe("labels", () => {
     ).toBe(true);
     expect(hasSidebarEnhancedFilterContent([rule({ id: "a" })], null)).toBe(false);
     expect(hasSidebarEnhancedFilterContent([], "acct")).toBe(true);
+  });
+});
+
+describe("sidebarSettledFilterCounts", () => {
+  it("keeps upstream total counts when no filter is active", () => {
+    expect(
+      sidebarSettledFilterCounts({ matched: 4, visible: 2, unloaded: 10, filtering: false }),
+    ).toEqual({ count: 14, hidden: 12, hasUnloaded: false });
+  });
+
+  it("counts known matches once and keeps unloaded history reachable", () => {
+    expect(
+      sidebarSettledFilterCounts({ matched: 4, visible: 2, unloaded: 10, filtering: true }),
+    ).toEqual({ count: 4, hidden: 2, hasUnloaded: true });
+    expect(
+      sidebarSettledFilterCounts({ matched: 0, visible: 0, unloaded: 10, filtering: true }),
+    ).toEqual({ count: 0, hidden: 0, hasUnloaded: true });
+  });
+
+  it("stops offering more when all history has been loaded", () => {
+    expect(
+      sidebarSettledFilterCounts({ matched: 0, visible: 0, unloaded: 0, filtering: true }),
+    ).toEqual({ count: 0, hidden: 0, hasUnloaded: false });
+  });
+});
+
+describe("sidebarSettledPageThreads", () => {
+  it("stops automatic page growth after scanning a nonmatching page", () => {
+    const environmentId = EnvironmentId.make("env");
+    const requested = new Map([[environmentId, 1]]);
+    const environments = new Map([
+      [
+        environmentId,
+        {
+          older: {
+            before: "2026-10-20T00:00:00Z",
+            beforeMs: 0,
+            counts: new Map([[ProjectId.make("project"), 75]]),
+          },
+          pages: {
+            reads: [],
+            frontier: { settledAt: "2026-10-19T00:00:00Z", threadId: ThreadId.make("last") },
+            status: "ready" as const,
+          },
+        },
+      ],
+    ]);
+    const scanned = Array.from({ length: 25 }, (_, index) => ({ title: `bot ${index}` }));
+    const { listedThreads, growthThreads } = sidebarSettledPageThreads(scanned, [], () => true);
+    expect(listedThreads).toEqual([]);
+    expect(
+      wantedOlderSettledPages({
+        requested,
+        environments,
+        listedCount: growthThreads.length,
+        visibleCount: 25,
+      }),
+    ).toBe(requested);
+    expect(
+      wantedOlderSettledPages({
+        requested,
+        environments,
+        listedCount: growthThreads.length,
+        visibleCount: 50,
+      }),
+    ).toEqual(new Map([[environmentId, 2]]));
+  });
+
+  it("does not count cached rows below the global page frontier", () => {
+    const scanned = [{ listed: true }, { listed: false }];
+    expect(sidebarSettledPageThreads(scanned, scanned, (thread) => thread.listed)).toEqual({
+      listedThreads: [scanned[0]],
+      growthThreads: [scanned[0]],
+    });
   });
 });
