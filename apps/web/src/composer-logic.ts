@@ -1,5 +1,9 @@
 import type { ClientSettings } from "@t3tools/contracts/settings";
-import type { AssistantCitation, ResolvedKeybindingsConfig } from "@t3tools/contracts";
+import {
+  ASSISTANT_CITATION_MAX_COMMENT_LENGTH,
+  type AssistantCitation,
+  type ResolvedKeybindingsConfig,
+} from "@t3tools/contracts";
 import {
   serializeAssistantCitation,
   withAssistantCitationComment,
@@ -34,7 +38,11 @@ export function formatAssistantCitationReplyForComposer(
   citation: AssistantCitation,
   replyText: string,
 ) {
-  return formatAssistantCitationForComposer(citation, replyText);
+  // An over-long comment would fail citation decoding and show raw markdown.
+  return formatAssistantCitationForComposer(
+    citation,
+    replyText.trim().slice(0, ASSISTANT_CITATION_MAX_COMMENT_LENGTH),
+  );
 }
 
 export interface ComposerQuickReplyAvailability {
