@@ -138,8 +138,10 @@ Next to **Cite in composer**, the selection toolbar can show a row of quick-repl
 one cites the selection and adds its reply text to the composer right after the quote, so you only
 need to review and send.
 
-The composer's own toolbar has a matching quick-replies button. Choosing a reply there appends it
-to whatever is already in the composer and sends immediately — there is nothing left to review.
+The composer footer has a matching **Quick replies** button next to **Attach files**. Choosing a
+reply there adds it after whatever is already in the composer and sends the message right away,
+exactly as pressing Enter would: while the agent is working, it follows your follow-up setting, and
+while you edit a queued message, it updates that message.
 
 Choose **Edit list** from either menu, or open **Settings → General → Behavior → Selection quick
 replies**, to add, remove, or reorder replies.

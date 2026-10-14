@@ -429,3 +429,18 @@ export function replaceTextRange(
   const nextText = `${text.slice(0, safeStart)}${replacement}${text.slice(safeEnd)}`;
   return { text: nextText, cursor: safeStart + replacement.length };
 }
+
+/**
+ * A composer quick reply appends its text and sends through the normal submit
+ * path. Submit runs only after the insert landed; a refused send leaves the
+ * appended text in the composer.
+ */
+export function sendComposerQuickReply(
+  reply: string,
+  insert: (text: string) => boolean,
+  submit: () => void,
+): boolean {
+  if (!insert(reply)) return false;
+  submit();
+  return true;
+}

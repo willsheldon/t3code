@@ -72,6 +72,7 @@ import {
   extendReplacementRangeForTrailingSpace,
   isComposerQuickReplyActionDisabled,
   replaceTextRange,
+  sendComposerQuickReply,
 } from "../../composer-logic";
 import { DEFAULT_COMPOSER_PLACEHOLDER } from "../../composerPlaceholder";
 import {
@@ -2757,19 +2758,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     canOperateThread,
     isEnvironmentUnavailable: environmentUnavailable !== null || noProviderAvailable,
   });
-  // A quick reply appends to whatever the composer already holds (citation
-  // chips, attachments, draft text all go along), then sends through the
-  // exact same path Enter and the send button use. A send that is refused
-  // there (and the button above is already disabled for every case it can
-  // check in advance) leaves the appended text in place rather than losing it.
-  const sendQuickReply = useCallback(
-    (reply: string) => {
-      const inserted = insertComposerTextAtEndStable(reply, { ensureLeadingBoundary: true });
-      if (!inserted) return;
-      submitComposerStable();
-    },
-    [insertComposerTextAtEndStable, submitComposerStable],
-  );
+  // A refused submission must leave the appended reply in the draft.
+  const sendQuickReply = (reply: string) => {
+    sendComposerQuickReply(
+      reply,
+      (text) => insertComposerTextAtEndStable(text, { ensureLeadingBoundary: true }),
+      submitComposerStable,
+    );
+  };
 
   const insertContextReferencesAtCaret = (
     references: ReadonlyArray<ComposerContextReference>,
@@ -3822,12 +3818,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   className="flex shrink-0 flex-nowrap items-center justify-end gap-2"
                 >
                   {composerAttachButton}
-                  <ComposerQuickRepliesMenu
-                    replies={settings.selectionQuickReplies}
-                    disabled={composerQuickReplyActionDisabled}
-                    onSelectReply={sendQuickReply}
-                    onEditList={navigateToQuickRepliesSettings}
-                  />
+                  {showComposerAttachAction ? (
+                    <ComposerQuickRepliesMenu
+                      replies={settings.selectionQuickReplies}
+                      disabled={composerQuickReplyActionDisabled}
+                      onSelectReply={sendQuickReply}
+                      onEditList={navigateToQuickRepliesSettings}
+                    />
+                  ) : null}
                   <ComposerFooterPrimaryActions
                     compact={isComposerResting || isComposerPrimaryActionsCompact}
                     canOperateThread={canOperateThread}
