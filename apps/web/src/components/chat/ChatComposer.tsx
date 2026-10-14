@@ -92,6 +92,7 @@ import {
   expandCollapsedComposerCursor,
   formatAssistantCitationForComposer,
   formatAssistantCitationReplyForComposer,
+  isComposerQuickReplyActionDisabled,
   replaceTextRange,
 } from "../../composer-logic";
 import { DISCONNECTED_COMPOSER_PLACEHOLDER } from "../../composerPlaceholder";
@@ -136,6 +137,7 @@ import {
   usePromptStashStore,
   type PromptStashEntry,
 } from "../../promptStashStore";
+import { ComposerQuickRepliesMenu } from "./ComposerQuickRepliesMenu";
 import { ComposerStashBadge } from "./ComposerStashBadge";
 import { ComposerStashMenu } from "./ComposerStashMenu";
 import { useComposerMenuState } from "./useComposerMenuState";
@@ -193,6 +195,7 @@ import {
 } from "../../lib/attachmentUploadState";
 import { isCommandPaletteOpen } from "../../commandPaletteBus";
 import { getTerminalFocusOwner } from "../../lib/terminalFocus";
+import { useNavigateToQuickRepliesSettings } from "~/hooks/useQuickRepliesSettingsNavigation";
 import type { AssistantCitationSourceAnchor } from "~/lib/assistantTextSelection";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../../keybindings";
 import {
@@ -1762,6 +1765,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     editingQueuedAttachments,
     onRemoveEditingQueuedAttachment,
   } = props;
+  const navigateToQuickRepliesSettings = useNavigateToQuickRepliesSettings();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const composerDraftTargetKey = composerTargetKey(composerDraftTarget);
   const {
@@ -5779,6 +5783,32 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   };
   const insertComposerTextAtEndStable = useStableCallback(insertComposerTextAtEnd);
 
+  // The quick-replies button mirrors the send button's own disabled state:
+  // a reply it inserts would otherwise sit in the composer unsent.
+  const composerQuickReplyActionDisabled = isComposerQuickReplyActionDisabled({
+    isConnecting,
+    isComposerApprovalState,
+    hasPendingUserInput: pendingUserInputs.length > 0,
+    projectSelectionRequired,
+    isSendBusy,
+    isSendDisabled,
+    canOperateThread,
+    isEnvironmentUnavailable: environmentUnavailable !== null || noProviderAvailable,
+  });
+  // A quick reply appends to whatever the composer already holds (citation
+  // chips, attachments, draft text all go along), then sends through the
+  // exact same path Enter and the send button use. A send that is refused
+  // there (and the button above is already disabled for every case it can
+  // check in advance) leaves the appended text in place rather than losing it.
+  const sendQuickReply = useCallback(
+    (reply: string) => {
+      const inserted = insertComposerTextAtEndStable(reply, { ensureLeadingBoundary: true });
+      if (!inserted) return;
+      submitComposerStable();
+    },
+    [insertComposerTextAtEndStable, submitComposerStable],
+  );
+
   const insertContextReferencesAtCaret = (
     references: ReadonlyArray<ComposerContextReference>,
   ): boolean =>
@@ -7303,6 +7333,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       </Tooltip>
                     </>
                   ) : null}
+                  <ComposerQuickRepliesMenu
+                    replies={settings.selectionQuickReplies}
+                    disabled={composerQuickReplyActionDisabled}
+                    onSelectReply={sendQuickReply}
+                    onEditList={navigateToQuickRepliesSettings}
+                  />
                   <ComposerFooterPrimaryActions
                     compact={isComposerResting || isComposerPrimaryActionsCompact}
                     canOperateThread={canOperateThread}
