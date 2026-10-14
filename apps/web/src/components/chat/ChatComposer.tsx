@@ -3056,9 +3056,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         return true;
       },
       citeAssistantText: (citation, sourceAnchor, replyText) => {
-        // A reply goes straight into the prompt after the chip, so the
-        // composer takes focus there instead of opening the chip's own
-        // comment popover (the default behavior for a plain Cite click).
+        // A quick reply arrives as the chip's comment already, so the
+        // composer takes focus after the chip instead of opening the comment
+        // popover (the default behavior for a plain Cite click).
         if (replyText) {
           const inserted = insertComposerTextStable(
             formatAssistantCitationReplyForComposer(citation, replyText),

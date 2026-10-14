@@ -134,9 +134,9 @@ navigate to their sources.
 
 ### Quick replies
 
-Next to **Cite in composer**, the selection toolbar can show a row of quick-reply buttons. Clicking
-one cites the selection and adds its reply text to the composer right after the quote, so you only
-need to review and send.
+When you select assistant text, the menu under **Cite** lists your quick replies. Choosing one cites
+the selection with the reply as the quote's comment, the same place a comment you type on **Cite**
+goes, so you only need to review and send.
 
 The composer footer has a matching **Quick replies** button next to **Attach files**. Choosing a
 reply there adds it after whatever is already in the composer and sends the message right away,
