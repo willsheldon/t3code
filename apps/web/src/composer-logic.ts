@@ -47,15 +47,14 @@ export function formatAssistantCitationForComposer(citation: AssistantCitation, 
 }
 
 /**
- * The composer text for a selection-toolbar quick reply: the citation chip
- * followed by the reply text and a trailing space, so the composer reads
- * `<citation chip> <replyText>`.
+ * The composer text for a selection-menu quick reply: the citation chip with
+ * the reply as its comment, the same place a typed comment on Cite goes.
  */
 export function formatAssistantCitationReplyForComposer(
   citation: AssistantCitation,
   replyText: string,
 ) {
-  return `${formatAssistantCitationForComposer(citation, citation.comment)}${replyText} `;
+  return formatAssistantCitationForComposer(citation, replyText);
 }
 
 export interface ComposerQuickReplyAvailability {
