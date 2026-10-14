@@ -1,4 +1,5 @@
 import type { ClientSettings } from "@t3tools/contracts/settings";
+import { ASSISTANT_CITATION_MAX_COMMENT_LENGTH } from "@t3tools/contracts";
 import type {
   AssistantCitation,
   EnvironmentId,
@@ -54,7 +55,11 @@ export function formatAssistantCitationReplyForComposer(
   citation: AssistantCitation,
   replyText: string,
 ) {
-  return formatAssistantCitationForComposer(citation, replyText);
+  // An over-long comment would fail citation decoding and show raw markdown.
+  return formatAssistantCitationForComposer(
+    citation,
+    replyText.trim().slice(0, ASSISTANT_CITATION_MAX_COMMENT_LENGTH),
+  );
 }
 
 export interface ComposerQuickReplyAvailability {

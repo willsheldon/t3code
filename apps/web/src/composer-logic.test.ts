@@ -1,5 +1,11 @@
 import { filterComposerPullRequestMatches } from "@t3tools/shared/composerPullRequestMatches";
-import { EnvironmentId, MessageId, ThreadId, type AssistantCitation } from "@t3tools/contracts";
+import {
+  ASSISTANT_CITATION_MAX_COMMENT_LENGTH,
+  EnvironmentId,
+  MessageId,
+  ThreadId,
+  type AssistantCitation,
+} from "@t3tools/contracts";
 import {
   collectAssistantCitations,
   expandAssistantCitationsForProvider,
@@ -98,6 +104,14 @@ describe("formatAssistantCitationForComposer", () => {
 });
 
 describe("formatAssistantCitationReplyForComposer", () => {
+  it("keeps long quick replies decodable by capping the citation comment", () => {
+    const reply = "x".repeat(ASSISTANT_CITATION_MAX_COMMENT_LENGTH + 1);
+    const text = formatAssistantCitationReplyForComposer(citation, `  ${reply}  `);
+    const citations = collectAssistantCitations(text);
+    expect(citations).toHaveLength(1);
+    expect(citations[0]?.citation.comment).toBe("x".repeat(ASSISTANT_CITATION_MAX_COMMENT_LENGTH));
+  });
+
   it("stores the reply as the citation's comment", () => {
     const text = formatAssistantCitationReplyForComposer(citation, "Agreed.");
     const expected = { ...citation, comment: "Agreed." };
