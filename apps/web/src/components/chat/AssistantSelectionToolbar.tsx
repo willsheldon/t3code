@@ -243,7 +243,7 @@ export function AssistantSelectionToolbar({
         <>
           {quickReplies.length > 0 ? (
             <>
-              <div aria-hidden="true" className="mx-2 my-1 h-px bg-border" />
+              <div aria-hidden="true" className="mx-2 my-1 h-px shrink-0 bg-border" />
               <div
                 aria-hidden="true"
                 className="px-2 pt-0.5 pb-1 font-medium text-muted-foreground text-xs"
@@ -264,7 +264,7 @@ export function AssistantSelectionToolbar({
               ))}
             </>
           ) : null}
-          <div aria-hidden="true" className="mx-2 my-1 h-px bg-border" />
+          <div aria-hidden="true" className="mx-2 my-1 h-px shrink-0 bg-border" />
           <button type="button" className={SELECTION_ACTION_ROW_CLASS_NAME} onClick={editList}>
             <Settings2Icon aria-hidden="true" />
             Edit list
@@ -285,5 +285,13 @@ function moveSelectionActionFocus(container: HTMLElement, step: 1 | -1): void {
   if (rows.length === 0) return;
   const current = rows.indexOf(document.activeElement as HTMLButtonElement);
   const next = current === -1 ? 0 : (current + step + rows.length) % rows.length;
-  rows[next]?.focus({ preventScroll: true });
+  const row = rows[next];
+  if (!row) return;
+  row.focus({ preventScroll: true });
+  // Keep the focused row visible in a scrolling menu without moving the chat.
+  if (row.offsetTop < container.scrollTop) {
+    container.scrollTop = row.offsetTop;
+  } else if (row.offsetTop + row.offsetHeight > container.scrollTop + container.clientHeight) {
+    container.scrollTop = row.offsetTop + row.offsetHeight - container.clientHeight;
+  }
 }
