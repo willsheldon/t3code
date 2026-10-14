@@ -46,6 +46,18 @@ export function formatAssistantCitationForComposer(citation: AssistantCitation, 
   return `${serializeAssistantCitation(withAssistantCitationComment(citation, comment))} `;
 }
 
+/**
+ * The composer text for a selection-toolbar quick reply: the citation chip
+ * followed by the reply text and a trailing space, so the composer reads
+ * `<citation chip> <replyText>`.
+ */
+export function formatAssistantCitationReplyForComposer(
+  citation: AssistantCitation,
+  replyText: string,
+) {
+  return `${formatAssistantCitationForComposer(citation, citation.comment)}${replyText} `;
+}
+
 export function composerRequiresModifier(
   sendShortcut: ClientSettings["sendShortcut"] | undefined,
   prompt: string,
