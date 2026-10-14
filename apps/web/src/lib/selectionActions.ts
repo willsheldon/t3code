@@ -39,6 +39,37 @@ export function isSelectionRectVisible(rect: SelectionRect, clips: readonly Sele
   return right > left && bottom > top;
 }
 
+const SELECTION_MENU_MARGIN_PX = 8;
+const SELECTION_MENU_GAP_PX = 4;
+
+/**
+ * Where the selection menu goes once its size is known. It opens below the
+ * selection when it fits, otherwise above it so it never covers the selected
+ * text, and only clamps into the viewport when neither side has room.
+ */
+export function placeSelectionActionMenu({
+  position,
+  anchorTop,
+  size,
+  viewport,
+}: {
+  position: SelectionActionPoint;
+  anchorTop: number;
+  size: { width: number; height: number };
+  viewport: { width: number; height: number };
+}): SelectionActionPoint {
+  const margin = SELECTION_MENU_MARGIN_PX;
+  const x = Math.max(margin, Math.min(position.x, viewport.width - size.width - margin));
+  const fitsBelow = position.y + size.height <= viewport.height - margin;
+  const above = anchorTop - SELECTION_MENU_GAP_PX - size.height;
+  const y = fitsBelow
+    ? position.y
+    : above >= margin
+      ? above
+      : Math.max(margin, Math.min(position.y, viewport.height - size.height - margin));
+  return { x, y };
+}
+
 /**
  * Interactive popovers pass getActionElement to keep editing their fields from replacing the
  * captured source selection.
