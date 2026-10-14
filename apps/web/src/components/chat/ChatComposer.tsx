@@ -90,6 +90,7 @@ import {
   formatAssistantCitationReplyForComposer,
   isComposerQuickReplyActionDisabled,
   replaceTextRange,
+  sendComposerQuickReply,
 } from "../../composer-logic";
 import { DISCONNECTED_COMPOSER_PLACEHOLDER } from "../../composerPlaceholder";
 import { listContinuationForEnter, listIndentForTab } from "../../composer-list-continuation";
@@ -6320,9 +6321,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   // check in advance) leaves the appended text in place rather than losing it.
   const sendQuickReply = useCallback(
     (reply: string) => {
-      const inserted = insertComposerTextAtEnd(reply, { ensureLeadingBoundary: true });
-      if (!inserted) return;
-      submitComposer();
+      sendComposerQuickReply(
+        reply,
+        (text) => insertComposerTextAtEnd(text, { ensureLeadingBoundary: true }),
+        submitComposer,
+      );
     },
     [insertComposerTextAtEnd, submitComposer],
   );
@@ -7821,12 +7824,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       </Tooltip>
                     </>
                   ) : null}
-                  <ComposerQuickRepliesMenu
-                    replies={settings.selectionQuickReplies}
-                    disabled={composerQuickReplyActionDisabled}
-                    onSelectReply={sendQuickReply}
-                    onEditList={navigateToQuickRepliesSettings}
-                  />
+                  {showComposerAttachAction ? (
+                    <ComposerQuickRepliesMenu
+                      replies={settings.selectionQuickReplies}
+                      disabled={composerQuickReplyActionDisabled}
+                      onSelectReply={sendQuickReply}
+                      onEditList={navigateToQuickRepliesSettings}
+                    />
+                  ) : null}
                   <ComposerFooterPrimaryActions
                     compact={isComposerResting || isComposerPrimaryActionsCompact}
                     canOperateThread={canOperateThread}
