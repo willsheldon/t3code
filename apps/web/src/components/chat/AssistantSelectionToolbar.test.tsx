@@ -6,7 +6,7 @@ import {
   type AssistantCitation,
 } from "@t3tools/contracts";
 import { act, type ReactNode } from "react";
-import { create, type ReactTestRenderer } from "react-test-renderer";
+import { create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { AssistantCitationSourceAnchor } from "~/lib/assistantTextSelection";
@@ -115,11 +115,12 @@ function mount(
   return onCite;
 }
 
+function textOf(node: ReactTestInstance | string): string {
+  return typeof node === "string" ? node : node.children.map(textOf).join("");
+}
+
 function findButton(label: string) {
-  return renderer.root.findAllByType("button").find((button) => {
-    const children = button.props.children;
-    return Array.isArray(children) ? children.includes(label) : children === label;
-  });
+  return renderer.root.findAllByType("button").find((button) => textOf(button).trim() === label);
 }
 
 beforeEach(() => {
