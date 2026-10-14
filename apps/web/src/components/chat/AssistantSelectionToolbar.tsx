@@ -4,10 +4,10 @@ import {
   type AssistantCitation,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
-import { useLocation, useNavigate } from "@tanstack/react-router";
 import { QuoteIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useNavigateToQuickRepliesSettings } from "~/hooks/useQuickRepliesSettingsNavigation";
 import { useClientSettings } from "~/hooks/useSettings";
 import {
   captureAssistantTextSelection,
@@ -18,11 +18,7 @@ import {
   resolveSelectionActionPosition,
   type SelectionActionPoint,
 } from "~/lib/selectionActions";
-import { scrollToSettingsTarget } from "../settings/settingsLayout";
 import { Button } from "../ui/button";
-
-/** Matches the settings search catalog id and row id in SettingsPanels.tsx. */
-const SELECTION_QUICK_REPLIES_SETTINGS_ANCHOR = "selection-quick-replies";
 
 export function AssistantSelectionToolbar({
   viewport,
@@ -37,9 +33,7 @@ export function AssistantSelectionToolbar({
     replyText?: string,
   ) => boolean;
 }) {
-  const navigate = useNavigate();
-  const pathname = useLocation({ select: (location) => location.pathname });
-  const hash = useLocation({ select: (location) => location.hash });
+  const navigateToQuickRepliesSettings = useNavigateToQuickRepliesSettings();
   const quickReplies = useClientSettings((settings) => settings.selectionQuickReplies);
   const [selection, setSelection] = useState<{
     citation: AssistantCitation;
@@ -154,19 +148,7 @@ export function AssistantSelectionToolbar({
   };
   const editList = () => {
     dismiss();
-    if (
-      pathname === "/settings/general" &&
-      hash.replace(/^#/, "") === SELECTION_QUICK_REPLIES_SETTINGS_ANCHOR
-    ) {
-      scrollToSettingsTarget(SELECTION_QUICK_REPLIES_SETTINGS_ANCHOR);
-      return;
-    }
-    void navigate({
-      to: "/settings/general",
-      hash: SELECTION_QUICK_REPLIES_SETTINGS_ANCHOR,
-      hashScrollIntoView: false,
-      state: { settingsTargetHighlight: true },
-    });
+    navigateToQuickRepliesSettings();
   };
   return createPortal(
     <div
