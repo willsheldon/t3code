@@ -333,6 +333,20 @@ export type ChatWidth = typeof ChatWidth.Type;
 export const EffortDisplay = Schema.Literals(["label", "bars"]);
 export type EffortDisplay = typeof EffortDisplay.Type;
 
+/**
+ * Quick-reply buttons on the assistant text selection toolbar. Clicking one
+ * cites the selection and appends the reply text to the composer.
+ */
+export const DEFAULT_SELECTION_QUICK_REPLIES: ReadonlyArray<string> = [
+  "Agreed.",
+  "No.",
+  "Explain this.",
+  "Why?",
+  "Go deeper on this.",
+  "Give an example.",
+  "Fix this.",
+];
+
 export const ModelFavorite = Schema.Struct({
   provider: ProviderInstanceId,
   model: TrimmedNonEmptyString,
@@ -526,6 +540,9 @@ export const ClientSettingsSchema = Schema.Struct({
   snapShotFlash: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   snapShotAnimations: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   wordWrap: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  selectionQuickReplies: Schema.Array(TrimmedNonEmptyString).pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_SELECTION_QUICK_REPLIES)),
+  ),
   // Opt-in TeX typesetting in rendered Markdown. Off keeps math parsing and
   // KaTeX out of the render path entirely.
   mathRenderingEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
@@ -1842,6 +1859,7 @@ export const ClientSettingsPatch = Schema.Struct({
   snapShotFlash: Schema.optionalKey(Schema.Boolean),
   snapShotAnimations: Schema.optionalKey(Schema.Boolean),
   wordWrap: Schema.optionalKey(Schema.Boolean),
+  selectionQuickReplies: Schema.optionalKey(Schema.Array(TrimmedNonEmptyString)),
   mathRenderingEnabled: Schema.optionalKey(Schema.Boolean),
 });
 export type ClientSettingsPatch = typeof ClientSettingsPatch.Type;
