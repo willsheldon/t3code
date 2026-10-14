@@ -455,6 +455,7 @@ interface MessagesTimelineProps {
   onCiteAssistantText?: (
     citation: AssistantCitation,
     sourceAnchor: AssistantCitationSourceAnchor,
+    replyText?: string,
   ) => boolean;
   isWorking: boolean;
   /** The live work belongs to a runless root turn (a provider-native subagent). */

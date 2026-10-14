@@ -466,6 +466,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["queue steer running turn send default behavior composer"],
   },
   {
+    id: "selection-quick-replies",
+    title: "Selection quick replies",
+    to: "/settings/general",
+    searchTerms: ["cite citation selection toolbar reply agreed quick responses"],
+  },
+  {
     id: "provider-update-checks",
     title: "Provider update checks",
     to: "/settings/general",
