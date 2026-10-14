@@ -91,6 +91,7 @@ import {
   detectComposerTrigger,
   expandCollapsedComposerCursor,
   formatAssistantCitationForComposer,
+  formatAssistantCitationReplyForComposer,
   replaceTextRange,
 } from "../../composer-logic";
 import { DISCONNECTED_COMPOSER_PLACEHOLDER } from "../../composerPlaceholder";
@@ -1437,9 +1438,16 @@ export interface ChatComposerHandle {
     options?: { ensureLeadingBoundary?: boolean; clipboardData?: DataTransfer },
   ) => boolean;
   pasteTextAtEnd: (text: string, options?: { bypassAutoAttachment?: boolean }) => boolean;
+  /**
+   * Inserts the citation chip, exactly as the plain Cite action does. When
+   * `replyText` is given, it is appended right after the chip instead of
+   * opening the chip's own comment popover, and the composer takes focus
+   * at the end of the inserted text so the user can edit and send.
+   */
   citeAssistantText: (
     citation: AssistantCitation,
     sourceAnchor: AssistantCitationSourceAnchor,
+    replyText?: string,
   ) => boolean;
   openModelPicker: () => void;
   toggleModelPicker: () => void;
@@ -6083,12 +6091,27 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         focusComposer();
         return true;
       },
-      citeAssistantText: (citation, sourceAnchor) =>
-        insertComposerTextStable(
+      citeAssistantText: (citation, sourceAnchor, replyText) => {
+        // A reply goes straight into the prompt after the chip, so the
+        // composer takes focus there instead of opening the chip's own
+        // comment popover (the default behavior for a plain Cite click).
+        if (replyText) {
+          const inserted = insertComposerTextStable(
+            formatAssistantCitationReplyForComposer(citation, replyText),
+            "cursor",
+            { ensureLeadingBoundary: true },
+          );
+          // At phone widths the scheduled focus cannot reveal a collapsed
+          // composer, so expand it like insertTextAtEnd does.
+          if (inserted && isComposerCollapsedMobile) expandMobileComposerStable();
+          return inserted;
+        }
+        return insertComposerTextStable(
           formatAssistantCitationForComposer(citation, citation.comment),
           "cursor",
           { ensureLeadingBoundary: true, citationCommentAnchor: sourceAnchor },
-        ),
+        );
+      },
       openModelPicker: openModelPickerStable,
       toggleModelPicker: () => {
         if (isComposerModelPickerOpen) {
@@ -6235,6 +6258,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       insertComposerDraftTerminalContext,
       insertComposerTextStable,
       insertComposerTextAtEndStable,
+      isComposerCollapsedMobile,
+      expandMobileComposerStable,
       promptRef,
       composerImagesRef,
       composerFilesRef,

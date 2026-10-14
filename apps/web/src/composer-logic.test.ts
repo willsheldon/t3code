@@ -21,6 +21,7 @@ import {
   detectComposerTrigger,
   expandCollapsedComposerCursor,
   formatAssistantCitationForComposer,
+  formatAssistantCitationReplyForComposer,
   isCollapsedCursorAdjacentToInlineToken,
   parseStandaloneComposerSlashCommand,
   replaceTextRange,
@@ -65,6 +66,14 @@ describe("formatAssistantCitationForComposer", () => {
     expect(text).toBe(`${serializeAssistantCitation(boundCitation)} `);
     expect(collectAssistantCitations(text).map((entry) => entry.citation)).toEqual([boundCitation]);
     expect(expandAssistantCitationsForProvider(text)).toMatch(/^\[assistant-quote-1\] \n\n/);
+  });
+});
+
+describe("formatAssistantCitationReplyForComposer", () => {
+  it("appends the reply text after the citation chip with a trailing space", () => {
+    const text = formatAssistantCitationReplyForComposer(citation, "Agreed.");
+    expect(text).toBe(`${serializeAssistantCitation(citation)} Agreed. `);
+    expect(collectAssistantCitations(text).map((entry) => entry.citation)).toEqual([citation]);
   });
 });
 
