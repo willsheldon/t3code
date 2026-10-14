@@ -1204,6 +1204,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     pendingUserInputs.length > 0 ||
     (!isComposerCollapsedMobile && showPlanFollowUpPrompt && activeProposedPlan !== null);
   const showCollapsedMobilePromptRow = isComposerCollapsedMobile;
+  // Quick replies send a plain message, so they need no attachment support;
+  // a pending question takes its own answer instead.
+  const showComposerQuickReplies = !activePendingProgress;
   const showComposerAttachAction =
     fileStagingLimit !== null &&
     (!activePendingProgress ||
@@ -3542,12 +3545,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   >
                     {composerControls}
                   </div>
-                  <ComposerQuickRepliesMenu
-                    replies={settings.selectionQuickReplies}
-                    disabled={composerQuickReplyActionDisabled}
-                    onSelectReply={sendQuickReply}
-                    onEditList={navigateToQuickRepliesSettings}
-                  />
+                  {showComposerQuickReplies ? (
+                    <ComposerQuickRepliesMenu
+                      replies={settings.selectionQuickReplies}
+                      disabled={composerQuickReplyActionDisabled}
+                      onSelectReply={sendQuickReply}
+                      onEditList={navigateToQuickRepliesSettings}
+                    />
+                  ) : null}
                   <ComposerFooterPrimaryActions
                     compact={isComposerPrimaryActionsCompact}
                     canOperateThread={canOperateThread}
