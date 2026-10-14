@@ -16,6 +16,7 @@ import {
 import {
   isSelectionRectVisible,
   observeSelectionActions,
+  placeSelectionActionMenu,
   resolveSelectionActionPosition,
   type SelectionActionPoint,
 } from "~/lib/selectionActions";
@@ -38,6 +39,8 @@ export function AssistantSelectionToolbar({
   const [selection, setSelection] = useState<{
     citation: AssistantCitation;
     position: SelectionActionPoint;
+    /** Top of the selected text, so a tall menu can open above it instead. */
+    anchorTop: number;
     sourceAnchor: AssistantCitationSourceAnchor;
   } | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -48,8 +51,14 @@ export function AssistantSelectionToolbar({
     const toolbar = toolbarRef.current;
     if (!toolbar || !selection) return;
     const rect = toolbar.getBoundingClientRect();
-    toolbar.style.left = `${Math.max(8, Math.min(selection.position.x, window.innerWidth - rect.width - 8))}px`;
-    toolbar.style.top = `${Math.max(8, Math.min(selection.position.y, window.innerHeight - rect.height - 8))}px`;
+    const placement = placeSelectionActionMenu({
+      position: selection.position,
+      anchorTop: selection.anchorTop,
+      size: { width: rect.width, height: rect.height },
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+    });
+    toolbar.style.left = `${placement.x}px`;
+    toolbar.style.top = `${placement.y}px`;
   }, [selection]);
 
   useEffect(() => {
@@ -133,6 +142,7 @@ export function AssistantSelectionToolbar({
           messageId: MessageId.make(messageId),
           ...captured.selector,
         },
+        anchorTop: rect.top,
         position: resolveSelectionActionPosition({
           bounds: viewportRect,
           selectionRect: rects.item(rects.length - 1) ?? rect,
@@ -202,7 +212,7 @@ export function AssistantSelectionToolbar({
       ref={toolbarRef}
       role="group"
       aria-label="Selection actions"
-      className="dropdown-glass fixed z-50 flex w-max min-w-40 max-w-[min(18rem,calc(100vw-1rem))] flex-col rounded-lg p-1 shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]"
+      className="dropdown-glass fixed z-50 flex max-h-[calc(100vh-1rem)] w-max min-w-40 max-w-[min(18rem,calc(100vw-1rem))] flex-col overflow-y-auto rounded-lg p-1 shadow-lg"
       style={{ left: selection.position.x, top: selection.position.y }}
       onPointerDown={(event) => event.preventDefault()}
       onKeyDown={(event) => {
@@ -268,7 +278,7 @@ export function AssistantSelectionToolbar({
 
 // Matches MenuItem rows so the selection popup reads as the app's other menus.
 const SELECTION_ACTION_ROW_CLASS_NAME =
-  "flex min-h-8 w-full cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1 text-left text-foreground text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-64 sm:min-h-7 [&>svg]:pointer-events-none [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground";
+  "[&>svg]:-mx-0.5 flex min-h-8 w-full shrink-0 cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1 text-left text-base text-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-64 sm:min-h-7 sm:text-sm [&>svg]:pointer-events-none [&>svg]:size-4.5 [&>svg]:shrink-0 [&>svg]:text-muted-foreground [&>svg]:opacity-80 sm:[&>svg]:size-4";
 
 function moveSelectionActionFocus(container: HTMLElement, step: 1 | -1): void {
   const rows = Array.from(container.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
