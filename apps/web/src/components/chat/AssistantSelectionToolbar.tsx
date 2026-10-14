@@ -245,7 +245,7 @@ export function AssistantSelectionToolbar({
         <Button
           type="button"
           size="xs"
-          variant="link"
+          variant="glass"
           className="text-muted-foreground"
           onClick={editList}
         >

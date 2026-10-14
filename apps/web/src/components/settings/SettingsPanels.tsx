@@ -1079,7 +1079,7 @@ export function GeneralSettingsPanel() {
       <SettingsSection title="Quick replies">
         <SettingsRow
           {...searchableSetting("selection-quick-replies")}
-          description="Buttons on the assistant text selection toolbar that cite the selection and add a reply to the composer."
+          description="Replies on the text selection toolbar, which cite the selection and fill the composer, and in the composer's Quick replies menu, which sends them."
           resetAction={
             !Equal.equals(settings.selectionQuickReplies, DEFAULT_SELECTION_QUICK_REPLIES) ? (
               <SettingResetButton
