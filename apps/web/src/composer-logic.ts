@@ -58,6 +58,37 @@ export function formatAssistantCitationReplyForComposer(
   return `${formatAssistantCitationForComposer(citation, citation.comment)}${replyText} `;
 }
 
+export interface ComposerQuickReplyAvailability {
+  /** The composer editor itself cannot take new text right now. */
+  isConnecting: boolean;
+  isComposerApprovalState: boolean;
+  hasPendingUserInput: boolean;
+  projectSelectionRequired: boolean;
+  /** The normal send path (Enter / the send button) would also refuse right now. */
+  isSendBusy: boolean;
+  isSendDisabled: boolean;
+  canOperateThread: boolean;
+  isEnvironmentUnavailable: boolean;
+}
+
+/**
+ * Whether the composer's quick-replies menu button should be disabled: either
+ * the editor cannot take the reply text, or the normal send path (the one a
+ * selected reply dispatches through) would refuse it anyway.
+ */
+export function isComposerQuickReplyActionDisabled(input: ComposerQuickReplyAvailability): boolean {
+  return (
+    input.isConnecting ||
+    input.isComposerApprovalState ||
+    input.hasPendingUserInput ||
+    input.projectSelectionRequired ||
+    input.isSendBusy ||
+    input.isSendDisabled ||
+    !input.canOperateThread ||
+    input.isEnvironmentUnavailable
+  );
+}
+
 export function composerRequiresModifier(
   sendShortcut: ClientSettings["sendShortcut"] | undefined,
   prompt: string,

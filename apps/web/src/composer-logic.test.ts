@@ -22,6 +22,7 @@ import {
   extendReplacementRangeForTrailingSpace,
   formatAssistantCitationForComposer,
   formatAssistantCitationReplyForComposer,
+  isComposerQuickReplyActionDisabled,
   isCollapsedCursorAdjacentToInlineToken,
   isPathSuggestionCurrent,
   replaceTextRange,
@@ -100,6 +101,36 @@ describe("formatAssistantCitationReplyForComposer", () => {
     const text = formatAssistantCitationReplyForComposer(citation, "Agreed.");
     expect(text).toBe(`${serializeAssistantCitation(citation)} Agreed. `);
     expect(collectAssistantCitations(text).map((entry) => entry.citation)).toEqual([citation]);
+  });
+});
+
+describe("isComposerQuickReplyActionDisabled", () => {
+  const available = {
+    isConnecting: false,
+    isComposerApprovalState: false,
+    hasPendingUserInput: false,
+    projectSelectionRequired: false,
+    isSendBusy: false,
+    isSendDisabled: false,
+    canOperateThread: true,
+    isEnvironmentUnavailable: false,
+  };
+
+  it("is not disabled when every guard is clear", () => {
+    expect(isComposerQuickReplyActionDisabled(available)).toBe(false);
+  });
+
+  it.each([
+    { isConnecting: true },
+    { isComposerApprovalState: true },
+    { hasPendingUserInput: true },
+    { projectSelectionRequired: true },
+    { isSendBusy: true },
+    { isSendDisabled: true },
+    { canOperateThread: false },
+    { isEnvironmentUnavailable: true },
+  ])("is disabled when %o", (override) => {
+    expect(isComposerQuickReplyActionDisabled({ ...available, ...override })).toBe(true);
   });
 });
 

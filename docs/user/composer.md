@@ -136,8 +136,13 @@ navigate to their sources.
 
 Next to **Cite in composer**, the selection toolbar can show a row of quick-reply buttons. Clicking
 one cites the selection and adds its reply text to the composer right after the quote, so you only
-need to review and send. Choose **Edit list** on the toolbar, or open **Settings → General →
-Behavior → Selection quick replies**, to add, remove, or reorder replies.
+need to review and send.
+
+The composer's own toolbar has a matching quick-replies button. Choosing a reply there appends it
+to whatever is already in the composer and sends immediately — there is nothing left to review.
+
+Choose **Edit list** from either menu, or open **Settings → General → Behavior → Selection quick
+replies**, to add, remove, or reorder replies.
 
 ## Recall a sent prompt
 
