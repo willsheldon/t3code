@@ -98,10 +98,11 @@ describe("formatAssistantCitationForComposer", () => {
 });
 
 describe("formatAssistantCitationReplyForComposer", () => {
-  it("appends the reply text after the citation chip with a trailing space", () => {
+  it("stores the reply as the citation's comment", () => {
     const text = formatAssistantCitationReplyForComposer(citation, "Agreed.");
-    expect(text).toBe(`${serializeAssistantCitation(citation)} Agreed. `);
-    expect(collectAssistantCitations(text).map((entry) => entry.citation)).toEqual([citation]);
+    const expected = { ...citation, comment: "Agreed." };
+    expect(text).toBe(`${serializeAssistantCitation(expected)} `);
+    expect(collectAssistantCitations(text).map((entry) => entry.citation)).toEqual([expected]);
   });
 });
 
