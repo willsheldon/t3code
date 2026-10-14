@@ -22,10 +22,14 @@ const mocks = vi.hoisted(() => ({
   } | null,
 }));
 
+const router = {
+  navigate: (...args: unknown[]) => mocks.navigate(...args),
+  get state() {
+    return { location: mocks.location };
+  },
+};
 vi.mock("@tanstack/react-router", () => ({
-  useNavigate: () => mocks.navigate,
-  useLocation: ({ select }: { select: (location: typeof mocks.location) => unknown }) =>
-    select(mocks.location),
+  useRouter: () => router,
 }));
 vi.mock("~/hooks/useSettings", () => ({
   useClientSettings: (
