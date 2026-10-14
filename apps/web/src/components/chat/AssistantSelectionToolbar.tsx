@@ -4,7 +4,7 @@ import {
   type AssistantCitation,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
-import { QuoteIcon } from "lucide-react";
+import { MessageSquareReplyIcon, QuoteIcon, Settings2Icon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigateToQuickRepliesSettings } from "~/hooks/useQuickRepliesSettingsNavigation";
@@ -19,7 +19,6 @@ import {
   resolveSelectionActionPosition,
   type SelectionActionPoint,
 } from "~/lib/selectionActions";
-import { Button } from "../ui/button";
 
 export function AssistantSelectionToolbar({
   viewport,
@@ -203,7 +202,7 @@ export function AssistantSelectionToolbar({
       ref={toolbarRef}
       role="group"
       aria-label="Selection actions"
-      className="fixed z-50 flex w-max max-w-[calc(100vw-1rem)] flex-wrap items-center gap-1"
+      className="dropdown-glass fixed z-50 flex w-max min-w-40 max-w-[min(18rem,calc(100vw-1rem))] flex-col rounded-lg p-1 shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]"
       style={{ left: selection.position.x, top: selection.position.y }}
       onPointerDown={(event) => event.preventDefault()}
       onKeyDown={(event) => {
@@ -211,48 +210,70 @@ export function AssistantSelectionToolbar({
         if (event.key === "Escape" && !event.nativeEvent.isComposing) {
           event.preventDefault();
           dismiss();
+          return;
+        }
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          moveSelectionActionFocus(event.currentTarget, event.key === "ArrowDown" ? 1 : -1);
         }
       }}
     >
-      <Button
+      <button
         ref={citeButtonRef}
         type="button"
-        size="xs"
-        variant="glass"
+        className={SELECTION_ACTION_ROW_CLASS_NAME}
         disabled={tooLong}
         aria-label={tooLong ? "Selection is too long to cite" : "Cite selection in composer"}
         onClick={() => cite()}
       >
-        <QuoteIcon aria-hidden="true" className="size-3.5" />
+        <QuoteIcon aria-hidden="true" />
         {tooLong ? "Shorten selection" : "Cite"}
-      </Button>
-      {tooLong
-        ? null
-        : quickReplies.map((reply, index) => (
-            <Button
-              key={`${index}:${reply}`}
-              type="button"
-              size="xs"
-              variant="glass"
-              className="max-w-48 truncate"
-              aria-label={`Cite selection and reply "${reply}"`}
-              onClick={() => cite(reply)}
-            >
-              {reply}
-            </Button>
-          ))}
+      </button>
       {tooLong ? null : (
-        <Button
-          type="button"
-          size="xs"
-          variant="glass"
-          className="text-muted-foreground"
-          onClick={editList}
-        >
-          Edit list
-        </Button>
+        <>
+          {quickReplies.length > 0 ? (
+            <>
+              <div aria-hidden="true" className="mx-2 my-1 h-px bg-border" />
+              <div
+                aria-hidden="true"
+                className="px-2 pt-0.5 pb-1 font-medium text-muted-foreground text-xs"
+              >
+                Reply
+              </div>
+              {quickReplies.map((reply, index) => (
+                <button
+                  key={`${index}:${reply}`}
+                  type="button"
+                  className={SELECTION_ACTION_ROW_CLASS_NAME}
+                  aria-label={`Cite selection and reply "${reply}"`}
+                  onClick={() => cite(reply)}
+                >
+                  <MessageSquareReplyIcon aria-hidden="true" />
+                  <span className="min-w-0 truncate">{reply}</span>
+                </button>
+              ))}
+            </>
+          ) : null}
+          <div aria-hidden="true" className="mx-2 my-1 h-px bg-border" />
+          <button type="button" className={SELECTION_ACTION_ROW_CLASS_NAME} onClick={editList}>
+            <Settings2Icon aria-hidden="true" />
+            Edit list
+          </button>
+        </>
       )}
     </div>,
     document.body,
   );
+}
+
+// Matches MenuItem rows so the selection popup reads as the app's other menus.
+const SELECTION_ACTION_ROW_CLASS_NAME =
+  "flex min-h-8 w-full cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1 text-left text-foreground text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-64 sm:min-h-7 [&>svg]:pointer-events-none [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground";
+
+function moveSelectionActionFocus(container: HTMLElement, step: 1 | -1): void {
+  const rows = Array.from(container.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
+  if (rows.length === 0) return;
+  const current = rows.indexOf(document.activeElement as HTMLButtonElement);
+  const next = current === -1 ? 0 : (current + step + rows.length) % rows.length;
+  rows[next]?.focus({ preventScroll: true });
 }
