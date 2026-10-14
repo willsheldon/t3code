@@ -377,3 +377,18 @@ export function extendReplacementRangeForTrailingSpace(
 }
 
 export { replaceTextRange } from "@t3tools/shared/composerTrigger";
+
+/**
+ * A composer quick reply appends its text and sends through the normal submit
+ * path. Submit runs only after the insert landed; a refused send leaves the
+ * appended text in the composer.
+ */
+export function sendComposerQuickReply(
+  reply: string,
+  insert: (text: string) => boolean,
+  submit: () => void,
+): boolean {
+  if (!insert(reply)) return false;
+  submit();
+  return true;
+}

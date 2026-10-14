@@ -25,6 +25,7 @@ import {
   isComposerQuickReplyActionDisabled,
   isPathSuggestionCurrent,
   replaceTextRange,
+  sendComposerQuickReply,
 } from "./composer-logic";
 import { slashCommandItemsForPromptPosition } from "./components/chat/composerSlashCommandSearch";
 import { carryDisplacedCustomAnswerIntoPrompt } from "./pendingUserInput";
@@ -101,6 +102,33 @@ describe("formatAssistantCitationReplyForComposer", () => {
     const text = formatAssistantCitationReplyForComposer(citation, "Agreed.");
     expect(text).toBe(`${serializeAssistantCitation(citation)} Agreed. `);
     expect(collectAssistantCitations(text).map((entry) => entry.citation)).toEqual([citation]);
+  });
+});
+
+describe("sendComposerQuickReply", () => {
+  it("inserts the reply before submitting", () => {
+    const calls: string[] = [];
+    const sent = sendComposerQuickReply(
+      "Agreed.",
+      (text) => {
+        calls.push(`insert:${text}`);
+        return true;
+      },
+      () => calls.push("submit"),
+    );
+    expect(sent).toBe(true);
+    expect(calls).toEqual(["insert:Agreed.", "submit"]);
+  });
+
+  it("does not submit when the insert is refused", () => {
+    const calls: string[] = [];
+    const sent = sendComposerQuickReply(
+      "No.",
+      () => false,
+      () => calls.push("submit"),
+    );
+    expect(sent).toBe(false);
+    expect(calls).toEqual([]);
   });
 });
 
