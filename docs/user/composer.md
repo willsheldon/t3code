@@ -132,6 +132,13 @@ The quoted text and comment count toward the message limit.
 Mobile displays saved quotes and comments, but does not create citations or
 navigate to their sources.
 
+### Quick replies
+
+Next to **Cite in composer**, the selection toolbar can show a row of quick-reply buttons. Clicking
+one cites the selection and adds its reply text to the composer right after the quote, so you only
+need to review and send. Choose **Edit list** on the toolbar, or open **Settings → General →
+Behavior → Selection quick replies**, to add, remove, or reorder replies.
+
 ## Recall a sent prompt
 
 Press `ArrowUp` in an empty composer to bring back the last prompt you sent in this thread. Press

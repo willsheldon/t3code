@@ -1,6 +1,6 @@
 import { NotificationSettings } from "./NotificationSettings";
 import { PRIVACY_POLICY_URL } from "../../legalLinks";
-import { CheckIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, CheckIcon, XIcon } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import {
@@ -12,6 +12,7 @@ import {
   type SidebarProjectGroupingMode,
 } from "@t3tools/contracts";
 import {
+  DEFAULT_SELECTION_QUICK_REPLIES,
   DEFAULT_UNIFIED_SETTINGS,
   type DiffLayout,
   MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
@@ -78,6 +79,10 @@ import { ScopedSwitch } from "./ScopedSwitch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
+  addSelectionQuickReply,
+  moveSelectionQuickReply,
+  removeSelectionQuickReply,
+  resetSelectionQuickReplies,
   getChangedBrowserSettingLabels,
   getChangedTypographySettingLabels,
   hasChangedBackgroundActivitySettings,
@@ -756,6 +761,7 @@ export function LegacyFeaturesSection() {
 export function GeneralSettingsPanel() {
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
+  const [quickReplyInput, setQuickReplyInput] = useState("");
   const lastEnabledProjectGroupingMode = useRef<SidebarProjectGroupingMode>(
     readLastEnabledProjectGroupingMode(),
   );
@@ -1069,6 +1075,148 @@ export function GeneralSettingsPanel() {
             </Select>
           }
         />
+      </SettingsSection>
+      <SettingsSection title="Quick replies">
+        <SettingsRow
+          {...searchableSetting("selection-quick-replies")}
+          description="Buttons on the assistant text selection toolbar that cite the selection and add a reply to the composer."
+          resetAction={
+            !Equal.equals(settings.selectionQuickReplies, DEFAULT_SELECTION_QUICK_REPLIES) ? (
+              <SettingResetButton
+                label="selection quick replies"
+                onClick={() =>
+                  updateSettings({ selectionQuickReplies: resetSelectionQuickReplies() })
+                }
+              />
+            ) : null
+          }
+        >
+          <div className="flex flex-col gap-2">
+            {settings.selectionQuickReplies.length > 0 ? (
+              <ul className="flex flex-col gap-1">
+                {settings.selectionQuickReplies.map((reply, index) => (
+                  <li
+                    key={`${index}:${reply}`}
+                    className="flex items-center gap-1.5 rounded-md border border-border/60 px-2 py-1.5"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm">{reply}</span>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            size="icon-micro"
+                            variant="ghost-muted"
+                            disabled={index === 0}
+                            aria-label={`Move "${reply}" up`}
+                            onClick={() =>
+                              updateSettings({
+                                selectionQuickReplies: moveSelectionQuickReply(
+                                  settings.selectionQuickReplies,
+                                  index,
+                                  -1,
+                                ),
+                              })
+                            }
+                          />
+                        }
+                      >
+                        <ArrowUpIcon className="size-3" />
+                      </TooltipTrigger>
+                      <TooltipPopup side="top">Move up</TooltipPopup>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            size="icon-micro"
+                            variant="ghost-muted"
+                            disabled={index === settings.selectionQuickReplies.length - 1}
+                            aria-label={`Move "${reply}" down`}
+                            onClick={() =>
+                              updateSettings({
+                                selectionQuickReplies: moveSelectionQuickReply(
+                                  settings.selectionQuickReplies,
+                                  index,
+                                  1,
+                                ),
+                              })
+                            }
+                          />
+                        }
+                      >
+                        <ArrowDownIcon className="size-3" />
+                      </TooltipTrigger>
+                      <TooltipPopup side="top">Move down</TooltipPopup>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            size="icon-micro"
+                            variant="ghost-muted"
+                            aria-label={`Remove "${reply}"`}
+                            onClick={() =>
+                              updateSettings({
+                                selectionQuickReplies: removeSelectionQuickReply(
+                                  settings.selectionQuickReplies,
+                                  index,
+                                ),
+                              })
+                            }
+                          />
+                        }
+                      >
+                        <XIcon className="size-3" />
+                      </TooltipTrigger>
+                      <TooltipPopup side="top">Remove</TooltipPopup>
+                    </Tooltip>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted-foreground">No quick replies yet.</p>
+            )}
+            <div className="flex gap-2">
+              <Input
+                size="sm"
+                className="min-w-0 flex-1"
+                value={quickReplyInput}
+                onChange={(event) => setQuickReplyInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  const next = addSelectionQuickReply(
+                    settings.selectionQuickReplies,
+                    quickReplyInput,
+                  );
+                  if (next !== settings.selectionQuickReplies) {
+                    updateSettings({ selectionQuickReplies: next });
+                  }
+                  setQuickReplyInput("");
+                }}
+                placeholder="New quick reply"
+                aria-label="New quick reply text"
+                spellCheck={false}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const next = addSelectionQuickReply(
+                    settings.selectionQuickReplies,
+                    quickReplyInput,
+                  );
+                  if (next !== settings.selectionQuickReplies) {
+                    updateSettings({ selectionQuickReplies: next });
+                  }
+                  setQuickReplyInput("");
+                }}
+              >
+                Add
+              </Button>
+            </div>
+          </div>
+        </SettingsRow>
       </SettingsSection>
     </SettingsPageContainer>
   );

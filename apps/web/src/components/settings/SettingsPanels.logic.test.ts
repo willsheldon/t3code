@@ -2,6 +2,10 @@ import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts";
 import * as Duration from "effect/Duration";
 import { describe, expect, it } from "vite-plus/test";
 import {
+  addSelectionQuickReply,
+  moveSelectionQuickReply,
+  removeSelectionQuickReply,
+  resetSelectionQuickReplies,
   backgroundActivitySharedPolicySettings,
   getChangedBrowserSettingLabels,
   hasChangedBackgroundActivitySettings,
@@ -86,5 +90,58 @@ describe("getChangedBrowserSettingLabels", () => {
         browserCustomSearchUrl: "https://search.example/?q=%s",
       }),
     ).toEqual(["Search engine"]);
+  });
+});
+
+describe("selection quick replies", () => {
+  it("appends a trimmed reply", () => {
+    expect(addSelectionQuickReply(["Agreed."], "  No.  ")).toEqual(["Agreed.", "No."]);
+  });
+
+  it("ignores a blank reply", () => {
+    const replies = ["Agreed."];
+    expect(addSelectionQuickReply(replies, "   ")).toBe(replies);
+  });
+
+  it("ignores an exact duplicate", () => {
+    const replies = ["Agreed.", "No."];
+    expect(addSelectionQuickReply(replies, "No.")).toBe(replies);
+    expect(addSelectionQuickReply(replies, "  No.  ")).toBe(replies);
+  });
+
+  it("removes the entry at the given index", () => {
+    expect(removeSelectionQuickReply(["Agreed.", "No.", "Why?"], 1)).toEqual(["Agreed.", "Why?"]);
+  });
+
+  it("leaves the list unchanged for an out-of-range remove", () => {
+    const replies = ["Agreed."];
+    expect(removeSelectionQuickReply(replies, -1)).toBe(replies);
+    expect(removeSelectionQuickReply(replies, 5)).toBe(replies);
+  });
+
+  it("moves an entry up or down", () => {
+    const replies = ["Agreed.", "No.", "Why?"];
+    expect(moveSelectionQuickReply(replies, 1, -1)).toEqual(["No.", "Agreed.", "Why?"]);
+    expect(moveSelectionQuickReply(replies, 1, 1)).toEqual(["Agreed.", "Why?", "No."]);
+  });
+
+  it("leaves the list unchanged when a move would go past either end", () => {
+    const replies = ["Agreed.", "No."];
+    expect(moveSelectionQuickReply(replies, 0, -1)).toBe(replies);
+    expect(moveSelectionQuickReply(replies, 1, 1)).toBe(replies);
+  });
+
+  it("resets to a fresh copy of the built-in defaults", () => {
+    const reset = resetSelectionQuickReplies();
+    expect(reset).toEqual([
+      "Agreed.",
+      "No.",
+      "Explain this.",
+      "Why?",
+      "Go deeper on this.",
+      "Give an example.",
+      "Fix this.",
+    ]);
+    expect(resetSelectionQuickReplies()).not.toBe(reset);
   });
 });

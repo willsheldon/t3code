@@ -8,7 +8,10 @@ import type {
   SidebarProjectGroupingMode,
   UnifiedSettings,
 } from "@t3tools/contracts";
-import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import {
+  DEFAULT_SELECTION_QUICK_REPLIES,
+  DEFAULT_UNIFIED_SETTINGS,
+} from "@t3tools/contracts/settings";
 import {
   getBackgroundActivityBaseProfile,
   normalizeBackgroundActivitySettings,
@@ -272,4 +275,43 @@ export function backgroundActivityOverrideSettings(
       overrides: nextOverrides as BackgroundActivitySettings["overrides"],
     },
   };
+}
+
+// ── Selection quick replies ─────────────────────────────────────────
+
+/** Appends a trimmed reply, ignoring a blank or already-present entry. */
+export function addSelectionQuickReply(replies: readonly string[], raw: string): readonly string[] {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0 || replies.includes(trimmed)) return replies;
+  return [...replies, trimmed];
+}
+
+/** Drops the entry at `index`; out-of-range leaves the list unchanged. */
+export function removeSelectionQuickReply(
+  replies: readonly string[],
+  index: number,
+): readonly string[] {
+  if (index < 0 || index >= replies.length) return replies;
+  return replies.filter((_, candidateIndex) => candidateIndex !== index);
+}
+
+/** Swaps the entry at `index` with its neighbor; a move past either end is a no-op. */
+export function moveSelectionQuickReply(
+  replies: readonly string[],
+  index: number,
+  direction: -1 | 1,
+): readonly string[] {
+  const target = index + direction;
+  if (index < 0 || index >= replies.length || target < 0 || target >= replies.length) {
+    return replies;
+  }
+  const next = [...replies];
+  const [moved] = next.splice(index, 1);
+  next.splice(target, 0, moved!);
+  return next;
+}
+
+/** The built-in quick replies, restored as a fresh array. */
+export function resetSelectionQuickReplies(): readonly string[] {
+  return [...DEFAULT_SELECTION_QUICK_REPLIES];
 }

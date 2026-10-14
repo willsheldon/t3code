@@ -7,6 +7,7 @@ import {
   ClientSettingsSchema,
   ClientSettingsPatch,
   ClaudeSettings,
+  DEFAULT_SELECTION_QUICK_REPLIES,
   DEFAULT_SERVER_SETTINGS,
   globalIdleCompaction,
   idleCompactionPatch,
@@ -377,5 +378,24 @@ describe("ClientSettings enhanced sidebar filter", () => {
     expect(
       decodeClientSettings({ sidebarEnhancedFilterEnabled: false }).sidebarEnhancedFilterEnabled,
     ).toBe(false);
+  });
+});
+
+describe("ClientSettings selection quick replies", () => {
+  it("defaults to the built-in quick replies", () => {
+    expect(decodeClientSettings({}).selectionQuickReplies).toEqual(DEFAULT_SELECTION_QUICK_REPLIES);
+  });
+
+  it("trims entries and rejects blank ones", () => {
+    expect(
+      decodeClientSettings({ selectionQuickReplies: ["  Agreed.  ", "No."] }).selectionQuickReplies,
+    ).toEqual(["Agreed.", "No."]);
+    expect(() => decodeClientSettings({ selectionQuickReplies: ["   "] })).toThrow();
+  });
+
+  it("round-trips a custom list through the patch schema", () => {
+    expect(
+      decodeClientSettingsPatch({ selectionQuickReplies: ["Looks good."] }).selectionQuickReplies,
+    ).toEqual(["Looks good."]);
   });
 });

@@ -4,9 +4,11 @@ import {
   type AssistantCitation,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { QuoteIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useClientSettings } from "~/hooks/useSettings";
 import {
   captureAssistantTextSelection,
   type AssistantCitationSourceAnchor,
@@ -17,7 +19,11 @@ import {
   resolveSelectionActionPosition,
   type SelectionActionPoint,
 } from "~/lib/selectionActions";
+import { scrollToSettingsTarget } from "../settings/settingsLayout";
 import { Button } from "../ui/button";
+
+/** Matches the settings search catalog id and row id in SettingsPanels.tsx. */
+const SELECTION_QUICK_REPLIES_SETTINGS_ANCHOR = "selection-quick-replies";
 
 export function AssistantSelectionToolbar({
   viewport,
@@ -26,14 +32,23 @@ export function AssistantSelectionToolbar({
 }: {
   viewport: HTMLElement | null;
   threadRef: ScopedThreadRef;
-  onCite: (citation: AssistantCitation, sourceAnchor: AssistantCitationSourceAnchor) => boolean;
+  onCite: (
+    citation: AssistantCitation,
+    sourceAnchor: AssistantCitationSourceAnchor,
+    replyText?: string,
+  ) => boolean;
 }) {
+  const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const hash = useLocation({ select: (location) => location.hash });
+  const quickReplies = useClientSettings((settings) => settings.selectionQuickReplies);
   const [selection, setSelection] = useState<{
     citation: AssistantCitation;
     position: SelectionActionPoint;
     sourceAnchor: AssistantCitationSourceAnchor;
   } | null>(null);
-  const toolbarRef = useRef<HTMLButtonElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const citeButtonRef = useRef<HTMLButtonElement>(null);
   const actionsRef = useRef<ReturnType<typeof observeSelectionActions> | null>(null);
 
   useLayoutEffect(() => {
@@ -143,6 +158,7 @@ export function AssistantSelectionToolbar({
     actionsRef.current = actions;
     const focusActions = (event: KeyboardEvent) => {
       const toolbar = toolbarRef.current;
+      const firstButton = citeButtonRef.current;
       if (
         event.key !== "Tab" ||
         event.shiftKey ||
@@ -152,14 +168,15 @@ export function AssistantSelectionToolbar({
         event.isComposing ||
         event.defaultPrevented ||
         !toolbar ||
+        !firstButton ||
         toolbar.contains(event.target as Node)
       ) {
         return;
       }
-      if (toolbar.disabled) return;
+      if (firstButton.disabled) return;
       event.preventDefault();
       event.stopPropagation();
-      toolbar.focus({ preventScroll: true });
+      firstButton.focus({ preventScroll: true });
     };
     document.addEventListener("keydown", focusActions, true);
     document.addEventListener("selectionchange", actions.selectionChanged);
@@ -177,24 +194,36 @@ export function AssistantSelectionToolbar({
     actionsRef.current?.cancel();
     setSelection(null);
   };
-  const cite = () => {
-    if (tooLong || !onCite(selection.citation, selection.sourceAnchor)) return false;
+  const cite = (replyText?: string): boolean => {
+    if (tooLong || !onCite(selection.citation, selection.sourceAnchor, replyText)) return false;
     window.getSelection()?.removeAllRanges();
     dismiss();
     return true;
   };
+  const editList = () => {
+    dismiss();
+    if (
+      pathname === "/settings/general" &&
+      hash.replace(/^#/, "") === SELECTION_QUICK_REPLIES_SETTINGS_ANCHOR
+    ) {
+      scrollToSettingsTarget(SELECTION_QUICK_REPLIES_SETTINGS_ANCHOR);
+      return;
+    }
+    void navigate({
+      to: "/settings/general",
+      hash: SELECTION_QUICK_REPLIES_SETTINGS_ANCHOR,
+      hashScrollIntoView: false,
+      state: { settingsTargetHighlight: true },
+    });
+  };
   return createPortal(
-    <Button
+    <div
       ref={toolbarRef}
-      type="button"
-      size="xs"
-      variant="glass"
-      disabled={tooLong}
-      aria-label={tooLong ? "Selection is too long to cite" : "Cite selection in composer"}
-      className="fixed z-50 max-w-[calc(100vw-1rem)]"
+      role="group"
+      aria-label="Selection actions"
+      className="fixed z-50 flex w-max max-w-[calc(100vw-1rem)] flex-wrap items-center gap-1"
       style={{ left: selection.position.x, top: selection.position.y }}
       onPointerDown={(event) => event.preventDefault()}
-      onClick={cite}
       onKeyDown={(event) => {
         event.stopPropagation();
         if (event.key === "Escape" && !event.nativeEvent.isComposing) {
@@ -203,9 +232,45 @@ export function AssistantSelectionToolbar({
         }
       }}
     >
-      <QuoteIcon aria-hidden="true" className="size-3.5" />
-      {tooLong ? "Shorten selection" : "Cite"}
-    </Button>,
+      <Button
+        ref={citeButtonRef}
+        type="button"
+        size="xs"
+        variant="glass"
+        disabled={tooLong}
+        aria-label={tooLong ? "Selection is too long to cite" : "Cite selection in composer"}
+        onClick={() => cite()}
+      >
+        <QuoteIcon aria-hidden="true" className="size-3.5" />
+        {tooLong ? "Shorten selection" : "Cite"}
+      </Button>
+      {tooLong
+        ? null
+        : quickReplies.map((reply, index) => (
+            <Button
+              key={`${index}:${reply}`}
+              type="button"
+              size="xs"
+              variant="glass"
+              className="max-w-48 truncate"
+              aria-label={`Cite selection and reply "${reply}"`}
+              onClick={() => cite(reply)}
+            >
+              {reply}
+            </Button>
+          ))}
+      {tooLong ? null : (
+        <Button
+          type="button"
+          size="xs"
+          variant="link"
+          className="text-muted-foreground"
+          onClick={editList}
+        >
+          Edit list
+        </Button>
+      )}
+    </div>,
     document.body,
   );
 }

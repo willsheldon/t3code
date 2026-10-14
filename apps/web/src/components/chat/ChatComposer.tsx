@@ -67,6 +67,7 @@ import {
   detectComposerTrigger,
   expandCollapsedComposerCursor,
   formatAssistantCitationForComposer,
+  formatAssistantCitationReplyForComposer,
   isPathSuggestionCurrent,
   extendReplacementRangeForTrailingSpace,
   replaceTextRange,
@@ -307,6 +308,7 @@ export interface ChatComposerHandle {
   citeAssistantText: (
     citation: AssistantCitation,
     sourceAnchor: AssistantCitationSourceAnchor,
+    replyText?: string,
   ) => boolean;
   openModelPicker: () => void;
   stepReasoningEffort: (direction: 1 | -1) => void;
@@ -3024,12 +3026,27 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         focusComposer();
         return true;
       },
-      citeAssistantText: (citation, sourceAnchor) =>
-        insertComposerTextStable(
+      citeAssistantText: (citation, sourceAnchor, replyText) => {
+        // A reply goes straight into the prompt after the chip, so the
+        // composer takes focus there instead of opening the chip's own
+        // comment popover (the default behavior for a plain Cite click).
+        if (replyText) {
+          const inserted = insertComposerTextStable(
+            formatAssistantCitationReplyForComposer(citation, replyText),
+            "cursor",
+            { ensureLeadingBoundary: true },
+          );
+          // At phone widths the scheduled focus cannot reveal a collapsed
+          // composer, so expand it like insertTextAtEnd does.
+          if (inserted && isComposerCollapsedMobile) expandMobileComposerStable();
+          return inserted;
+        }
+        return insertComposerTextStable(
           formatAssistantCitationForComposer(citation, citation.comment),
           "cursor",
           { ensureLeadingBoundary: true, citationCommentAnchor: sourceAnchor },
-        ),
+        );
+      },
       openModelPicker: openModelPickerStable,
       stepReasoningEffort: (direction) => {
         if (noProviderAvailable || pendingUserInputs.length > 0 || isEditingQueuedMessage) {
@@ -3216,6 +3233,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       insertComposerDraftTerminalContext,
       insertComposerTextStable,
       insertComposerTextAtEndStable,
+      isComposerCollapsedMobile,
+      expandMobileComposerStable,
       promptRef,
       composerImagesRef,
       composerFilesRef,
