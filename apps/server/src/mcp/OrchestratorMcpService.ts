@@ -1469,9 +1469,10 @@ const make = Effect.gen(function* () {
     if (task.childThreadId === null) {
       return yield* readRemoteTask(scope, task, waitTimedOut, acknowledgeTerminal);
     }
+    // Optional failure metadata must not prevent status reads from task records.
     const childShell = yield* threadManagement
       .getThreadShell(task.childThreadId)
-      .pipe(Effect.mapError(threadManagementFailure));
+      .pipe(Effect.orElseSucceed(() => null));
     const childControls = yield* threadManagement
       .getThreadRecords(
         task.childThreadId,
