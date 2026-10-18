@@ -1299,9 +1299,11 @@ const make = Effect.gen(function* () {
           `Delegated task ${taskId} does not belong to thread ${scope.thread.threadId}.`,
         );
       }
+      // Failure metadata is optional: a shell read error must not fail a status
+      // the task records can still answer.
       const childShell = yield* threadManagement
         .getThreadShell(task.childThreadId)
-        .pipe(Effect.mapError(threadManagementFailure));
+        .pipe(Effect.orElseSucceed(() => null));
       const childControls = yield* threadManagement
         .getThreadRecords(
           task.childThreadId,
