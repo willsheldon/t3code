@@ -843,6 +843,8 @@ function threadDetail(
     link: threadLinkFor(scope, projection.thread.id, projection.thread.title),
     createdBy: projection.thread.createdBy,
     creationSource: projection.thread.creationSource,
+    lastErrorClass: shell.lastErrorClass ?? null,
+    usageLimitResetAt: shell.usageLimitResetAt ?? null,
     status: active?.status ?? latest?.status ?? "idle",
     latestRunId: latest?.id ?? null,
     activeRunId: active?.id ?? null,
@@ -1467,6 +1469,9 @@ const make = Effect.gen(function* () {
     if (task.childThreadId === null) {
       return yield* readRemoteTask(scope, task, waitTimedOut, acknowledgeTerminal);
     }
+    const childShell = yield* threadManagement
+      .getThreadShell(task.childThreadId)
+      .pipe(Effect.mapError(threadManagementFailure));
     const childControls = yield* threadManagement
       .getThreadRecords(
         task.childThreadId,
@@ -1586,6 +1591,8 @@ const make = Effect.gen(function* () {
       ),
       childRunId: childRun?.id ?? null,
       childNodeId: task.id,
+      lastErrorClass: childShell?.lastErrorClass ?? null,
+      usageLimitResetAt: childShell?.usageLimitResetAt ?? null,
       status,
       workState,
       hasPendingChildRuns: hasPendingChildRuns(childProjection, childRun),
