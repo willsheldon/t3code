@@ -193,6 +193,7 @@ it.each([
   { lastErrorClass: null, usageLimitResetAt: null },
   { lastErrorClass: "usage_limit" as const, usageLimitResetAt: "2026-10-18T15:23:45.123Z" },
   { lastErrorClass: "provider_error" as const, usageLimitResetAt: null },
+  { failShellRead: true },
 ])("taskStatus copies failure metadata %j", async (metadata) => {
   const parentProjection = {
     thread: baseThread({
@@ -277,14 +278,16 @@ it.each([
         Layer.mock(ThreadManagementService.ThreadManagementService)({
           getTimelinePage: () => Effect.succeed({ items: [], totalItems: 0, hasMore: false }),
           getThreadShell: (threadId) =>
-            Effect.succeed(
-              threadId === childThreadId
-                ? ({
-                    ...childProjection.thread,
-                    ...metadata,
-                  } as unknown as OrchestrationV2ThreadShell)
-                : null,
-            ),
+            "failShellRead" in metadata
+              ? Effect.fail(new Error("simulated shell read failure") as never)
+              : Effect.succeed(
+                  threadId === childThreadId
+                    ? ({
+                        ...childProjection.thread,
+                        ...metadata,
+                      } as unknown as OrchestrationV2ThreadShell)
+                    : null,
+                ),
           getThreadRecords: (threadId) => {
             if (threadId === parentThreadId) return Effect.succeed(parentProjection);
             if (threadId === childThreadId) return Effect.succeed(childProjection);
@@ -311,8 +314,12 @@ it.each([
   await Effect.gen(function* () {
     const service = yield* OrchestratorMcpService.OrchestratorMcpService;
     const result = yield* service.taskStatus(makeScope(), taskId);
-    expect(result.lastErrorClass).toBe(metadata.lastErrorClass ?? null);
-    expect(result.usageLimitResetAt).toBe(metadata.usageLimitResetAt ?? null);
+    expect(result.lastErrorClass).toBe(
+      "lastErrorClass" in metadata ? metadata.lastErrorClass : null,
+    );
+    expect(result.usageLimitResetAt).toBe(
+      "usageLimitResetAt" in metadata ? metadata.usageLimitResetAt : null,
+    );
     expect(result.providerInstanceId).toBe(customCodexInstanceId);
     expect(result.providerInstanceId).not.toBe(ProviderInstanceId.make(String(codexDriver)));
     expect(result.status).toBe("running");
