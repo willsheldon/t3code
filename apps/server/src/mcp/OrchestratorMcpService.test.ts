@@ -152,6 +152,7 @@ describe("OrchestratorMcpService", () => {
         NodeServices.layer,
         NodeCrypto.layer,
         Layer.mock(ThreadManagementService.ThreadManagementService)({
+          getThreadShell: (threadId) => Effect.succeed(liveThreadShell(threadId)),
           getThreadRecords: (threadId) =>
             Effect.sync(() => {
               if (threadId !== parentThreadId) {
@@ -294,6 +295,7 @@ describe("OrchestratorMcpService", () => {
         NodeServices.layer,
         NodeCrypto.layer,
         Layer.mock(ThreadManagementService.ThreadManagementService)({
+          getThreadShell: (threadId) => Effect.succeed(liveThreadShell(threadId)),
           getThreadRecords: (threadId) =>
             Effect.succeed(threadId === parentThreadId ? parentProjection : childProjection),
           delegatedTaskResultPending: () =>
@@ -1449,6 +1451,7 @@ describe("OrchestratorMcpService provider resolution", () => {
           NodeServices.layer,
           NodeCrypto.layer,
           Layer.mock(ThreadManagementService.ThreadManagementService)({
+            getThreadShell: (threadId) => Effect.succeed(liveThreadShell(threadId)),
             getThreadRecords: () => Effect.succeed(parentProjection([])),
           }),
           ServerSettings.layerTest({
@@ -1653,6 +1656,7 @@ describe("OrchestratorMcpService provider resolution", () => {
                 NodeServices.layer,
                 NodeCrypto.layer,
                 Layer.mock(ThreadManagementService.ThreadManagementService)({
+                  getThreadShell: (threadId) => Effect.succeed(liveThreadShell(threadId)),
                   getThreadRecords: () =>
                     Effect.succeed(
                       parentProjection([], { instanceId: codexInstanceId, model: "gpt-3" }),
@@ -1784,6 +1788,7 @@ describe("OrchestratorMcpService provider resolution", () => {
         NodeServices.layer,
         NodeCrypto.layer,
         Layer.mock(ThreadManagementService.ThreadManagementService)({
+          getThreadShell: (threadId) => Effect.succeed(liveThreadShell(threadId)),
           hasReceipt: () => Effect.succeed(false),
           getThreadRecords: () => Effect.succeed(parentProjection([])),
         }),
@@ -1861,6 +1866,12 @@ describe("OrchestratorMcpService provider resolution", () => {
         NodeServices.layer,
         NodeCrypto.layer,
         Layer.mock(ThreadManagementService.ThreadManagementService)({
+          getThreadShell: (threadId) =>
+            Effect.succeed({
+              ...liveThreadShell(threadId),
+              lastErrorClass: "usage_limit",
+              usageLimitResetAt: "2026-10-18T15:23:45.123Z",
+            }),
           hasReceipt: () => Effect.succeed(false),
           getThreadRecords: (threadId) =>
             Effect.succeed(
@@ -1926,6 +1937,8 @@ describe("OrchestratorMcpService provider resolution", () => {
           mode: "async",
           clientRequestId: "delegate-driver-skip-disabled-1",
         });
+        assert.equal(result.lastErrorClass, "usage_limit");
+        assert.equal(result.usageLimitResetAt, "2026-10-18T15:23:45.123Z");
         assert.equal(result.status, "running");
         const commands = yield* Ref.get(dispatched);
         assert.equal(commands.length, 1);
@@ -1969,6 +1982,7 @@ describe("OrchestratorMcpService provider resolution", () => {
           NodeServices.layer,
           NodeCrypto.layer,
           Layer.mock(ThreadManagementService.ThreadManagementService)({
+            getThreadShell: (threadId) => Effect.succeed(liveThreadShell(threadId)),
             getThreadRecords: (threadId) =>
               Ref.get(accepted).pipe(
                 Effect.map((isAccepted) =>
@@ -2336,6 +2350,7 @@ describe("OrchestratorMcpService provider resolution", () => {
             NodeServices.layer,
             NodeCrypto.layer,
             Layer.mock(ThreadManagementService.ThreadManagementService)({
+              getThreadShell: (threadId) => Effect.succeed(liveThreadShell(threadId)),
               hasReceipt: () => Effect.succeed(false),
               assertProviderInstanceEnabled: () => Effect.void,
               isProviderInstanceEnabledForProject: () => Effect.succeed(true),
@@ -2980,6 +2995,7 @@ describe("OrchestratorMcpService provider resolution", () => {
           NodeServices.layer,
           NodeCrypto.layer,
           Layer.mock(ThreadManagementService.ThreadManagementService)({
+            getThreadShell: (threadId) => Effect.succeed(liveThreadShell(threadId)),
             getThreadRecords: (threadId) =>
               Effect.succeed(
                 threadId === parentThreadId
@@ -3079,6 +3095,7 @@ describe("OrchestratorMcpService provider resolution", () => {
             NodeServices.layer,
             NodeCrypto.layer,
             Layer.mock(ThreadManagementService.ThreadManagementService)({
+              getThreadShell: (threadId) => Effect.succeed(liveThreadShell(threadId)),
               hasReceipt: () => Effect.succeed(false),
               assertProviderInstanceEnabled: () => Effect.void,
               getThreadRecords: (threadId) =>
