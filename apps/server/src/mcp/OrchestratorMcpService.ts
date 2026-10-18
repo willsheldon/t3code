@@ -1496,9 +1496,10 @@ const make = Effect.gen(function* () {
       return yield* readRemoteTask(scope, task, waitTimedOut, acknowledgeTerminal);
     }
     const parentProjection = yield* loadTaskParent(scope.thread.threadId);
+    // Optional failure metadata must not prevent status reads from task records.
     const childShell = yield* threadManagement
       .getThreadShell(task.childThreadId)
-      .pipe(Effect.mapError(threadManagementFailure));
+      .pipe(Effect.orElseSucceed(() => null));
     const childControls = yield* threadManagement
       .getThreadRecords(
         task.childThreadId,
