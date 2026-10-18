@@ -318,7 +318,8 @@ task the child delegated, and disposes automatic parent delivery. Like a user St
 watches. A nonterminal task with no interruptible run is rejected. A terminal task
 returns its existing status, and its child thread still stops, including later
 runs and watch wakes. Published task results remain available. It accepts an
-optional cancellation reason.
+optional cancellation reason. Cancelling a task also disarms automatic usage-limit
+resume for the child.
 
 ### `create_threads`
 

@@ -295,6 +295,9 @@ it.effect(
         commandId: CommandId.make("stop-idle-again"),
         threadId,
       });
+      assert.isNull(
+        (yield* orchestrator.getThreadProjection(threadId)).thread.limitRecovery ?? null,
+      );
       assert.lengthOf(again.storedEvents, 0);
     }).pipe(Effect.provide(layerTest)),
 );

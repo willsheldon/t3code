@@ -8746,7 +8746,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
   }) =>
     Effect.gen(function* () {
       const emitEvent = emit(input.events, input.command);
-      const { thread, runs, subagents } = input.projection;
+      const { runs, subagents } = input.projection;
+      let { thread } = input.projection;
       const queuedRuns = runs.filter((run) => run.status === "queued");
       const queuedMessages =
         queuedRuns.length === 0
@@ -8793,6 +8794,20 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           providerInstanceId: run.providerInstanceId,
           occurredAt: input.now,
           payload: { ...run, queueHeld: true },
+        });
+      }
+      if (thread.limitRecovery?.autoResume) {
+        thread = {
+          ...thread,
+          // Keep the recovery identity so the worker cannot re-arm this stopped run.
+          limitRecovery: { ...thread.limitRecovery, autoResume: false },
+          updatedAt: input.now,
+        };
+        yield* emitEvent({
+          type: "thread.metadata-updated",
+          threadId: thread.id,
+          occurredAt: input.now,
+          payload: thread,
         });
       }
       const pullRequests = thread.pullRequests ?? [];
