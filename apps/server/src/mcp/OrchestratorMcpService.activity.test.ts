@@ -114,7 +114,12 @@ function makeRun(input: {
   };
 }
 
-it("readThread prefers activity-run status over a newer cancelled queued run", async () => {
+it.each([
+  {},
+  { lastErrorClass: null, usageLimitResetAt: null },
+  { lastErrorClass: "usage_limit" as const, usageLimitResetAt: "2026-10-18T15:23:45.123Z" },
+  { lastErrorClass: "provider_error" as const, usageLimitResetAt: null },
+])("readThread copies failure metadata %j", async (metadata) => {
   const projection = {
     thread: baseThread({
       threadId: parentThreadId,
@@ -146,7 +151,7 @@ it("readThread prefers activity-run status over a newer cancelled queued run", a
           getThreadShell: (threadId) =>
             Effect.succeed(
               threadId === parentThreadId
-                ? (projection.thread as unknown as OrchestrationV2ThreadShell)
+                ? ({ ...projection.thread, ...metadata } as unknown as OrchestrationV2ThreadShell)
                 : null,
             ),
           getProjectThreadRecords: (input) =>
@@ -174,6 +179,8 @@ it("readThread prefers activity-run status over a newer cancelled queued run", a
   await Effect.gen(function* () {
     const service = yield* OrchestratorMcpService.OrchestratorMcpService;
     const result = yield* service.readThread(makeScope(), { threadId: parentThreadId });
+    expect(result.thread.lastErrorClass).toBe(metadata.lastErrorClass ?? null);
+    expect(result.thread.usageLimitResetAt).toBe(metadata.usageLimitResetAt ?? null);
     expect(result.thread.status).toBe("running");
     expect(result.thread.latestRunId).toBe(cancelledRunId);
     expect(result.thread.activeRunId).toBe(activeRunId);
@@ -245,7 +252,13 @@ it("readThread prefers waiting activity status over a newer cancelled queued run
   }).pipe(Effect.provide(layer), Effect.runPromise);
 });
 
-it("taskStatus returns task.providerInstanceId rather than the driver kind", async () => {
+it.each([
+  {},
+  { lastErrorClass: null, usageLimitResetAt: null },
+  { lastErrorClass: "usage_limit" as const, usageLimitResetAt: "2026-10-18T15:23:45.123Z" },
+  { lastErrorClass: "provider_error" as const, usageLimitResetAt: null },
+  { failShellRead: true },
+])("taskStatus copies failure metadata %j", async (metadata) => {
   const parentProjection = {
     thread: baseThread({
       threadId: parentThreadId,
@@ -328,6 +341,17 @@ it("taskStatus returns task.providerInstanceId rather than the driver kind", asy
       Layer.mergeAll(
         Layer.mock(ThreadManagementService.ThreadManagementService)({
           getTimelinePage: () => Effect.succeed({ items: [], totalItems: 0, hasMore: false }),
+          getThreadShell: (threadId) =>
+            "failShellRead" in metadata
+              ? Effect.fail(new Error("simulated shell read failure") as never)
+              : Effect.succeed(
+                  threadId === childThreadId
+                    ? ({
+                        ...childProjection.thread,
+                        ...metadata,
+                      } as unknown as OrchestrationV2ThreadShell)
+                    : null,
+                ),
           getThreadRecords: (threadId) => {
             if (threadId === parentThreadId) return Effect.succeed(parentProjection);
             if (threadId === childThreadId) return Effect.succeed(childProjection);
@@ -354,6 +378,12 @@ it("taskStatus returns task.providerInstanceId rather than the driver kind", asy
   await Effect.gen(function* () {
     const service = yield* OrchestratorMcpService.OrchestratorMcpService;
     const result = yield* service.taskStatus(makeScope(), taskId);
+    expect(result.lastErrorClass).toBe(
+      "lastErrorClass" in metadata ? metadata.lastErrorClass : null,
+    );
+    expect(result.usageLimitResetAt).toBe(
+      "usageLimitResetAt" in metadata ? metadata.usageLimitResetAt : null,
+    );
     expect(result.providerInstanceId).toBe(customCodexInstanceId);
     expect(result.providerInstanceId).not.toBe(ProviderInstanceId.make(String(codexDriver)));
     expect(result.status).toBe("running");

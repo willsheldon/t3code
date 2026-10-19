@@ -5217,6 +5217,10 @@ it.layer(layerTest)("usage-limit recovery", (it) => {
     "resume",
     "queued-resume",
     "cancel",
+    "stop",
+    "stop-web-message",
+    "stop-mcp-message",
+    "stop-manual-continuation",
     "rearm",
     "snooze-race",
     "new-message",
@@ -5380,6 +5384,7 @@ it.layer(layerTest)("usage-limit recovery", (it) => {
         return;
       }
       const snooze = [
+        "stop",
         "snooze-only",
         "manual-snooze-after-recovery",
         "snooze-resume",
@@ -5505,6 +5510,56 @@ it.layer(layerTest)("usage-limit recovery", (it) => {
           limitRecovery: { runId: run.id, resetAt, autoResume: false, snooze: false },
         });
         assert.isNull((yield* orchestrator.getThreadProjection(threadId)).thread.snoozedUntil);
+      }
+      if (scenario.startsWith("stop")) {
+        if (scenario === "stop") {
+          yield* orchestrator.dispatch({
+            type: "thread.pull-request.watch",
+            commandId: CommandId.make("recovery:stop-watch"),
+            threadId,
+            host: "github.com",
+            repository: "pingdotgg/t3code",
+            number: 164,
+            watching: true,
+            link: { url: "https://github.com/pingdotgg/t3code/pull/164", source: "manual" },
+          });
+        }
+        yield* orchestrator.dispatch({
+          type: "thread.stop",
+          commandId: CommandId.make(`recovery:stop:${scenario}`),
+          threadId,
+        });
+        const stopped = yield* orchestrator.getThreadProjection(threadId);
+        assert.deepEqual(stopped.thread.limitRecovery, {
+          runId: run.id,
+          resetAt,
+          autoResume: false,
+          snooze,
+          requestId: arm!.commandId,
+        });
+        assert.isFalse(
+          (stopped.thread.pullRequests ?? []).some((link) => link.watch !== undefined),
+        );
+        const stoppedShell = (yield* orchestrator.getShellSnapshot()).threads.find(
+          (thread) => thread.id === threadId,
+        )!;
+        for (const snoozePreference of [false, true]) {
+          assert.isNull(
+            limitRecoveryCommand(stoppedShell, true, DateTime.toEpochMillis(now), snoozePreference),
+          );
+          assert.isNull(
+            limitRecoveryCommand(stoppedShell, true, Date.parse(resetAt), snoozePreference),
+          );
+        }
+        const projections = yield* ProjectionStore.ProjectionStoreV2;
+        for (const candidateTime of [now, DateTime.makeUnsafe(resetAt)]) {
+          const candidates = yield* projections.getLimitRecoveryCandidates({
+            now: candidateTime,
+            autoResume: true,
+            snooze: true,
+          });
+          assert.isFalse(candidates.some((thread) => thread.id === threadId));
+        }
       }
       assert.isNull(limitRecoveryCommand(armedShell, true, DateTime.toEpochMillis(now)));
       yield* orchestrator.dispatch({
@@ -5681,6 +5736,23 @@ it.layer(layerTest)("usage-limit recovery", (it) => {
             ? 1
             : 0),
       );
+      if (scenario.startsWith("stop-")) {
+        yield* orchestrator.dispatch({
+          type: "message.dispatch",
+          commandId: CommandId.make(`recovery:manual:${scenario}`),
+          messageId: MessageId.make(`recovery:manual:${scenario}`),
+          threadId,
+          ...(scenario === "stop-manual-continuation" ? { manualContinuationOfRunId: run.id } : {}),
+          text: "Continue this work manually.",
+          attachments: [],
+          dispatchMode: { type: "start_immediately" },
+          createdBy: "user",
+          creationSource: scenario === "stop-mcp-message" ? "mcp" : "web",
+        });
+        const continued = yield* orchestrator.getThreadProjection(threadId);
+        assert.lengthOf(continued.runs, 2);
+        assert.equal(continued.runs[1]?.status, "starting");
+      }
       if (scenario === "queued-resume") {
         assert.equal(after.runs[1]?.status, "queued");
         assert.isTrue(after.runs[1]?.queueHeld);

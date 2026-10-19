@@ -275,6 +275,15 @@ type DelegateTaskResult = {
   status: "queued" | "running" | "waiting" | "completed" | "failed" | "cancelled" | "interrupted";
   workState: "working" | "waiting_for_children" | "result_available";
   hasPendingChildRuns: boolean;
+  lastErrorClass?:
+    | "usage_limit"
+    | "provider_error"
+    | "transport_error"
+    | "permission_error"
+    | "validation_error"
+    | "unknown"
+    | null;
+  usageLimitResetAt?: string | null; // ISO 8601 UTC
   providerInstanceId: string;
   model: string | null;
   summary: string | null;
@@ -297,7 +306,9 @@ and an available result. The task remains nonterminal until its known work
 finishes. Its published `summary` and result transfer then remain stable across
 later follow-ups. `hasPendingChildRuns` reports later queued or executing turns;
 `latestTerminal*` exposes later executed, non-monitor results without replacing
-the published task result.
+the published task result. `lastErrorClass` and `usageLimitResetAt` reflect the
+child thread's current shell, preserving the provider failure class and ISO 8601
+UTC reset timestamp. Both fields are optional and nullable.
 
 ### `task_cancel`
 
@@ -307,7 +318,8 @@ task the child delegated, and disposes automatic parent delivery. Like a user St
 watches. A nonterminal task with no interruptible run is rejected. A terminal task
 returns its existing status, and its child thread still stops, including later
 runs and watch wakes. Published task results remain available. It accepts an
-optional cancellation reason.
+optional cancellation reason. Cancelling a task also disarms automatic usage-limit
+resume for the child.
 
 ### `create_threads`
 
@@ -367,6 +379,10 @@ messages, and proposed plans. The `activity` view also returns summarized tool,
 reasoning, checkpoint, handoff, and runtime-request items. Large item text is
 bounded and reports whether it was truncated. `afterPosition` and
 `nextPosition` support incremental reads.
+
+The returned `thread` includes optional nullable `lastErrorClass` and
+`usageLimitResetAt` fields with the same types and meaning as delegated task
+results.
 
 Thread and message results include required `createdBy` and `creationSource`
 provenance. MCP-created threads and user-role messages use `createdBy: "agent"`
