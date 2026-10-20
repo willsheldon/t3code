@@ -280,12 +280,12 @@ export type ChatWidth = typeof ChatWidth.Type;
  */
 export const DEFAULT_SELECTION_QUICK_REPLIES: ReadonlyArray<string> = [
   "Agreed.",
-  "No.",
-  "Explain this.",
-  "Why?",
-  "Go deeper on this.",
-  "Give an example.",
+  "Approved",
   "Fix this.",
+  "what?",
+  "done",
+  "No.",
+  "yes",
 ];
 
 export const ModelFavorite = Schema.Struct({

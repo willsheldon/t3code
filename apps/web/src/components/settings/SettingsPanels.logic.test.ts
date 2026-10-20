@@ -300,15 +300,7 @@ describe("selection quick replies", () => {
 
   it("resets to a fresh copy of the built-in defaults", () => {
     const reset = resetSelectionQuickReplies();
-    expect(reset).toEqual([
-      "Agreed.",
-      "No.",
-      "Explain this.",
-      "Why?",
-      "Go deeper on this.",
-      "Give an example.",
-      "Fix this.",
-    ]);
+    expect(reset).toEqual(["Agreed.", "Approved", "Fix this.", "what?", "done", "No.", "yes"]);
     expect(resetSelectionQuickReplies()).not.toBe(reset);
   });
 });
