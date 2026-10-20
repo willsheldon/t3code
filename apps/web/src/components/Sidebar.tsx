@@ -1250,7 +1250,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     : "";
   // oxlint-disable-next-line t3code/react-effect-budget -- Persisted filters can change outside a sidebar event handler.
   useEffect(() => {
-    void enhancedFilterKey;
     clearSelection();
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- A changed filter invalidates selection even when the clear function is stable.
   }, [clearSelection, enhancedFilterKey]);
