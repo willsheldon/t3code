@@ -51,7 +51,10 @@ export const ComposerQuickRepliesMenu = memo(function ComposerQuickRepliesMenu({
       <MenuPopup align="end" sideOffset={6}>
         {replies.length > 0 ? (
           replies.map((reply, index) => (
-            <MenuItem key={`${index}:${reply}`} onClick={() => onSelectReply(reply)}>
+            <MenuItem // oxlint-disable-next-line react/no-array-index-key -- Saved lists can contain duplicate reply text.
+              key={`${index}:${reply}`}
+              onClick={() => onSelectReply(reply)}
+            >
               <MenuItemLabel>{reply}</MenuItemLabel>
             </MenuItem>
           ))
