@@ -252,6 +252,7 @@ export function AssistantSelectionToolbar({
               </div>
               {quickReplies.map((reply, index) => (
                 <button
+                  // oxlint-disable-next-line react/no-array-index-key -- Saved lists can contain duplicate reply text.
                   key={`${index}:${reply}`}
                   type="button"
                   className={SELECTION_ACTION_ROW_CLASS_NAME}

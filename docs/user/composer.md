@@ -143,7 +143,7 @@ reply there adds it after whatever is already in the composer and sends the mess
 exactly as pressing Enter would: while the agent is working, it follows your follow-up setting, and
 while you edit a queued message, it updates that message.
 
-Choose **Edit list** from either menu, or open **Settings → General → Behavior → Selection quick
+Choose **Edit list** from either menu, or open **Settings → General → Quick replies → Selection quick
 replies**, to add, remove, or reorder replies.
 
 ## Recall a sent prompt

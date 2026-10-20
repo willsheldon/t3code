@@ -211,7 +211,8 @@ account. Click a rule's chip to turn it off or on, or click its x to remove it.
 The end of the row shows how many threads are hidden. **Clear all** in the
 filter removes every rule and the account filter.
 
-Search and the section counts follow the filters. The thread you have open stays
+Search and the section counts follow the filters. Expand Settled to load older
+matching threads; its count updates as they load. The thread you have open stays
 visible even when a filter would hide it, so you never lose your place. Your
 rules are remembered on this device. If the selected account is no longer
 available, it appears as **Unavailable account** until you clear it.

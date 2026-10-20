@@ -54,14 +54,17 @@ function useDebouncedPattern(
   const [draft, setDraft] = useState(savedText);
   const lastSavedRef = useRef(savedText);
   const saveRef = useRef(save);
+  // oxlint-disable-next-line t3code/react-effect-budget -- Synchronize the save callback used by the pending timer and unmount cleanup.
   useEffect(() => {
     saveRef.current = save;
   });
+  // oxlint-disable-next-line t3code/react-effect-budget -- Replace the draft when persistent storage changes outside this field.
   useEffect(() => {
     if (savedText === lastSavedRef.current) return;
     lastSavedRef.current = savedText;
     setDraft(savedText);
   }, [savedText]);
+  // oxlint-disable-next-line t3code/react-effect-budget -- Debounce persistent writes without filtering the whole sidebar per keystroke.
   useEffect(() => {
     if (draft === lastSavedRef.current) return;
     const id = window.setTimeout(() => {
@@ -73,9 +76,11 @@ function useDebouncedPattern(
   // Unmounting inside the pause would otherwise drop the last keystrokes. The
   // save is id-keyed, so it does nothing for a rule that was just removed.
   const draftRef = useRef(draft);
+  // oxlint-disable-next-line t3code/react-effect-budget -- Keep the latest draft for unmount cleanup.
   useEffect(() => {
     draftRef.current = draft;
   }, [draft]);
+  // oxlint-disable-next-line t3code/react-effect-budget -- Flush pending edits when the popover unmounts.
   useEffect(
     () => () => {
       if (draftRef.current !== lastSavedRef.current) saveRef.current(draftRef.current);
@@ -226,6 +231,7 @@ export function SidebarEnhancedFilterButton({
   // A rule id, "add" for the add button, or null. A ref, not state: the rule
   // change that goes with it already re-renders, and focus follows that commit.
   const pendingFocusRef = useRef<string | null>(null);
+  // oxlint-disable-next-line t3code/react-effect-budget -- Focus the inserted or adjacent input after its DOM commit.
   useEffect(() => {
     const target = pendingFocusRef.current;
     if (target === null) return;

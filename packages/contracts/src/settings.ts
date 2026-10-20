@@ -290,17 +290,17 @@ export const ChatWidth = Schema.Literals(["comfortable", "wide", "full"]);
 export type ChatWidth = typeof ChatWidth.Type;
 
 /**
- * Quick-reply buttons on the assistant text selection toolbar. Clicking one
- * cites the selection and appends the reply text to the composer.
+ * Shared replies for the selection menu and composer. Selection replies become
+ * citation comments; composer replies append text and send the message.
  */
 export const DEFAULT_SELECTION_QUICK_REPLIES: ReadonlyArray<string> = [
   "Agreed.",
-  "No.",
-  "Explain this.",
-  "Why?",
-  "Go deeper on this.",
-  "Give an example.",
+  "Approved",
   "Fix this.",
+  "what?",
+  "done",
+  "No.",
+  "yes",
 ];
 
 export const ModelFavorite = Schema.Struct({

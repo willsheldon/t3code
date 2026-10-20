@@ -1096,6 +1096,7 @@ export function GeneralSettingsPanel() {
               <ul className="flex flex-col gap-1">
                 {settings.selectionQuickReplies.map((reply, index) => (
                   <li
+                    // oxlint-disable-next-line react/no-array-index-key -- Saved lists can contain duplicate reply text.
                     key={`${index}:${reply}`}
                     className="flex items-center gap-1.5 rounded-md border border-border/60 px-2 py-1.5"
                   >
