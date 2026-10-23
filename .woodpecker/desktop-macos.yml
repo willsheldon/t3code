@@ -1,0 +1,64 @@
+# Owner-pushed, unsigned macOS desktop build on Stadium. Public pull requests
+# must never execute on this persistent native agent.
+when:
+  - event: manual
+  - event: push
+    branch: [main, fix/*, local/*, codex/*]
+
+labels:
+  repo: willsheldon/t3code
+  platform: darwin/arm64
+  backend: local
+  hostname: nida-m5-t3code
+  trust: public-owner-push
+
+# The repository has a gitlink without a .gitmodules entry. The Woodpecker
+# clone plugin fails its submodule pass, so fetch the exact triggering commit.
+skip_clone: true
+
+steps:
+  - name: clone
+    image: /bin/bash
+    commands:
+      - set -euo pipefail
+      - mkdir -p "$CI_WORKSPACE"
+      - cd "$CI_WORKSPACE"
+      - git init -q .
+      - git remote add origin "$CI_REPO_CLONE_URL"
+      - git fetch -q --no-tags --depth=1 origin "$CI_COMMIT_SHA"
+      - git reset --hard -q FETCH_HEAD
+      - test "$(git rev-parse HEAD)" = "$CI_COMMIT_SHA"
+
+  - name: toolchain
+    image: /bin/bash
+    commands:
+      - set -euo pipefail
+      - test "$(uname -s)" = Darwin
+      - test "$(uname -m)" = arm64
+      - test "$(id -un)" = _woodpecker_t3
+      - test "$(node --version)" = v24.13.1
+      - test "$(pnpm --version)" = 11.10.0
+      - rustup target list --installed | grep -qx aarch64-apple-darwin
+
+  - name: install
+    image: /bin/bash
+    commands:
+      - set -euo pipefail
+      - cd "$CI_WORKSPACE"
+      - pnpm install --frozen-lockfile
+
+  - name: unsigned-desktop-build
+    image: /bin/bash
+    commands:
+      - set -euo pipefail
+      - cd "$CI_WORKSPACE"
+      # These public identifiers are exported directly. Project policy forbids
+      # materializing even a public .env file during a build.
+      - set -a; . ./.env.example; set +a
+      - base_version="$(node -p "require('./apps/desktop/package.json').version")"
+      - short_sha="$(printf '%s' "$CI_COMMIT_SHA" | cut -c1-8)"
+      - build_version="$base_version-fork.$short_sha"
+      - node scripts/update-release-package-versions.ts "$build_version"
+      - pnpm run dist:desktop:artifact --platform mac --target dmg --arch arm64 --build-version "$build_version"
+      - test "$(find release -maxdepth 1 -name '*.dmg' -type f | wc -l | tr -d ' ')" = 1
+      - shasum -a 256 release/*.dmg
