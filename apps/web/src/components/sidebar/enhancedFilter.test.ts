@@ -170,6 +170,15 @@ describe("thread filters", () => {
 });
 
 describe("title cache and runaway guard", () => {
+  it("reuses the compiled rules and title cache while the rules are unchanged", () => {
+    const rules = [rule({ id: "a", pattern: "reuse", regex: true })];
+    const compiled = compileSidebarTitleRules(rules);
+    expect(compileSidebarTitleRules(rules.map((r) => ({ ...r })))).toBe(compiled);
+    expect(compileSidebarTitleRules([rule({ id: "a", pattern: "other", regex: true })])).not.toBe(
+      compiled,
+    );
+  });
+
   it("writes and removes the pass marker around uncached regex matching only", () => {
     const store = new MemoryStore();
     const compiled = compileSidebarTitleRules([rule({ id: "a", pattern: "x", regex: true })]);

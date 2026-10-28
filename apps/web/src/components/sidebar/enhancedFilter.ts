@@ -117,7 +117,25 @@ export type CompiledSidebarTitleRules = {
   readonly cache: Map<string, boolean>;
 };
 
+let lastCompiledTitleRules: {
+  readonly key: string;
+  readonly compiled: CompiledSidebarTitleRules;
+} | null = null;
+
+// Returns the same compiled rules, and so the same title cache, while the rules are unchanged.
+// The sidebar calls this every render with a freshly decoded rules array, and the React
+// Compiler does not memoize the call, so the key is the rules' content, not their identity.
 export function compileSidebarTitleRules(
+  rules: ReadonlyArray<SidebarTitleRule>,
+): CompiledSidebarTitleRules {
+  const key = JSON.stringify(rules);
+  if (lastCompiledTitleRules?.key === key) return lastCompiledTitleRules.compiled;
+  const compiled = compileSidebarTitleRulesUncached(rules);
+  lastCompiledTitleRules = { key, compiled };
+  return compiled;
+}
+
+function compileSidebarTitleRulesUncached(
   rules: ReadonlyArray<SidebarTitleRule>,
 ): CompiledSidebarTitleRules {
   const hide: TitleMatcher[] = [];
