@@ -222,7 +222,8 @@ sidebar search) narrows the list by project, thread title and account. It
 replaces the separate project filter button while it is on.
 
 - **Projects.** Check any number of projects to show only their threads. Each
-  row also has the project's pin and settings controls.
+  row also has the project's pin and settings controls. Right-click a row to
+  open its project settings.
 - **Title rules.** Add up to 20 rules. Each rule either hides threads whose
   title matches, or only shows threads that match. Turn on **.\*** to use a
   regular expression instead of plain text. Matching ignores letter case. A
