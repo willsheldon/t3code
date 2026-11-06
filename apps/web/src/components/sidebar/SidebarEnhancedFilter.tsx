@@ -1,11 +1,17 @@
 /**
- * The enhanced thread filter: a header button whose popover edits title rules
- * and the account, and a chip row under the search field that keeps active
+ * The enhanced thread filter: a header button whose popover edits projects,
+ * title rules and the account, and a chip row under the search field that keeps active
  * filters visible and one click from off. State lives in the sidebar; this file
  * only renders it through the helpers in `enhancedFilter.ts`.
  */
-import { PlusIcon, SlidersHorizontalIcon, XIcon } from "lucide-react";
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
+import { CheckIcon, PlusIcon, SlidersHorizontalIcon, XIcon } from "lucide-react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { cn, randomUUID } from "~/lib/utils";
 import { SIDEBAR_UNAVAILABLE_ACCOUNT_LABEL } from "../Sidebar.logic";
@@ -21,6 +27,7 @@ import {
   type CompiledSidebarTitleRules,
   SIDEBAR_TITLE_RULE_LIMIT,
   type SidebarTitleRule,
+  filterSidebarProjectOptions,
   hasSidebarEnhancedFilterContent,
   insertSidebarTitleRule,
   newSidebarTitleRule,
@@ -36,10 +43,12 @@ import {
 import { SidebarHeaderIconButton } from "./SidebarThreadHeader";
 
 type AccountOption = { readonly key: string; readonly label: string };
+type ProjectOption = { readonly key: string; readonly label: string };
 type RulesUpdate = (rules: ReadonlyArray<SidebarTitleRule>) => ReadonlyArray<SidebarTitleRule>;
 
 const PATTERN_SAVE_DELAY_MS = 150;
 const MAX_CHIPS = 6;
+const PROJECT_SEARCH_THRESHOLD = 8;
 
 /**
  * Keeps a pattern field's text local and saves it after a short pause. Saving
@@ -54,17 +63,17 @@ function useDebouncedPattern(
   const [draft, setDraft] = useState(savedText);
   const lastSavedRef = useRef(savedText);
   const saveRef = useRef(save);
-  // oxlint-disable-next-line t3code/react-effect-budget -- Synchronize the save callback used by the pending timer and unmount cleanup.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Synchronize the save callback used by the pending timer and unmount cleanup.
   useEffect(() => {
     saveRef.current = save;
   });
-  // oxlint-disable-next-line t3code/react-effect-budget -- Replace the draft when persistent storage changes outside this field.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Replace the draft when persistent storage changes outside this field.
   useEffect(() => {
     if (savedText === lastSavedRef.current) return;
     lastSavedRef.current = savedText;
     setDraft(savedText);
   }, [savedText]);
-  // oxlint-disable-next-line t3code/react-effect-budget -- Debounce persistent writes without filtering the whole sidebar per keystroke.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Debounce persistent writes without filtering the whole sidebar per keystroke.
   useEffect(() => {
     if (draft === lastSavedRef.current) return;
     const id = window.setTimeout(() => {
@@ -76,11 +85,11 @@ function useDebouncedPattern(
   // Unmounting inside the pause would otherwise drop the last keystrokes. The
   // save is id-keyed, so it does nothing for a rule that was just removed.
   const draftRef = useRef(draft);
-  // oxlint-disable-next-line t3code/react-effect-budget -- Keep the latest draft for unmount cleanup.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Keep the latest draft for unmount cleanup.
   useEffect(() => {
     draftRef.current = draft;
   }, [draft]);
-  // oxlint-disable-next-line t3code/react-effect-budget -- Flush pending edits when the popover unmounts.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Flush pending edits when the popover unmounts.
   useEffect(
     () => () => {
       if (draftRef.current !== lastSavedRef.current) saveRef.current(draftRef.current);
@@ -207,6 +216,72 @@ function TitleRuleRow({
   );
 }
 
+/** Checkbox rows for the project scope. Each row toggles on its own, so several can stay on. */
+function ProjectFilterSection({
+  options,
+  selectedKeys,
+  onToggle,
+  renderIcon,
+  renderActions,
+}: {
+  options: ReadonlyArray<ProjectOption>;
+  selectedKeys: ReadonlyArray<string>;
+  onToggle: (key: string) => void;
+  renderIcon: (key: string) => ReactNode;
+  renderActions: (key: string) => ReactNode;
+}) {
+  const [query, setQuery] = useState("");
+  const shownOptions = filterSidebarProjectOptions(options, query);
+  return (
+    <section className="flex flex-col gap-1.5" aria-label="Projects">
+      <h3 className="text-2xs font-medium text-muted-foreground">Projects</h3>
+      {options.length > PROJECT_SEARCH_THRESHOLD ? (
+        <InputGroup>
+          <InputGroupInput
+            aria-label="Search projects"
+            placeholder="Search projects..."
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+          />
+        </InputGroup>
+      ) : null}
+      {shownOptions.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No matching projects.</p>
+      ) : (
+        <div className="flex max-h-48 flex-col overflow-y-auto">
+          {shownOptions.map((option) => {
+            const selected = selectedKeys.includes(option.key);
+            return (
+              <div key={option.key} className="flex items-center rounded-md hover:bg-accent">
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={selected}
+                  className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-1.5 py-1 text-left"
+                  onClick={() => onToggle(option.key)}
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "flex size-3.5 shrink-0 items-center justify-center rounded-sm border border-input",
+                      selected && "border-primary bg-primary text-primary-foreground",
+                    )}
+                  >
+                    {selected ? <CheckIcon className="size-3" /> : null}
+                  </span>
+                  {renderIcon(option.key)}
+                  <span className="min-w-0 flex-1 truncate text-sm">{option.label}</span>
+                </button>
+                {renderActions(option.key)}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function SidebarEnhancedFilterButton({
   rules,
   compiled,
@@ -214,6 +289,13 @@ export function SidebarEnhancedFilterButton({
   accountOptions,
   selectedAccountKey,
   onAccountChange,
+  projectOptions,
+  selectedProjectKeys,
+  selectedProjectNames,
+  onProjectToggle,
+  onProjectsClear,
+  renderProjectIcon,
+  renderProjectActions,
   open,
   onOpenChange,
 }: {
@@ -223,6 +305,13 @@ export function SidebarEnhancedFilterButton({
   accountOptions: ReadonlyArray<AccountOption>;
   selectedAccountKey: string | null;
   onAccountChange: (key: string | null) => void;
+  projectOptions: ReadonlyArray<ProjectOption>;
+  selectedProjectKeys: ReadonlyArray<string>;
+  selectedProjectNames: ReadonlyArray<string>;
+  onProjectToggle: (key: string) => void;
+  onProjectsClear: () => void;
+  renderProjectIcon: (key: string) => ReactNode;
+  renderProjectActions: (key: string) => ReactNode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -231,7 +320,7 @@ export function SidebarEnhancedFilterButton({
   // A rule id, "add" for the add button, or null. A ref, not state: the rule
   // change that goes with it already re-renders, and focus follows that commit.
   const pendingFocusRef = useRef<string | null>(null);
-  // oxlint-disable-next-line t3code/react-effect-budget -- Focus the inserted or adjacent input after its DOM commit.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Focus the inserted or adjacent input after its DOM commit.
   useEffect(() => {
     const target = pendingFocusRef.current;
     if (target === null) return;
@@ -240,7 +329,11 @@ export function SidebarEnhancedFilterButton({
     element?.focus();
   });
 
-  const badgeCount = sidebarEnhancedFilterBadgeCount(compiled, selectedAccountKey);
+  const badgeCount = sidebarEnhancedFilterBadgeCount(
+    compiled,
+    selectedAccountKey,
+    selectedProjectKeys.length,
+  );
   const atLimit = rules.length >= SIDEBAR_TITLE_RULE_LIMIT;
   const accountMissing =
     selectedAccountKey !== null &&
@@ -272,6 +365,7 @@ export function SidebarEnhancedFilterButton({
               rules,
               accountKey: selectedAccountKey,
               accountOptions,
+              projectNames: selectedProjectNames,
             })}
           />
         }
@@ -295,6 +389,15 @@ export function SidebarEnhancedFilterButton({
         initialFocus={() => inputs.current.get(rules[0]?.id ?? "") ?? addButtonRef.current}
       >
         <div className="flex flex-col gap-3">
+          {projectOptions.length > 0 ? (
+            <ProjectFilterSection
+              options={projectOptions}
+              selectedKeys={selectedProjectKeys}
+              onToggle={onProjectToggle}
+              renderIcon={renderProjectIcon}
+              renderActions={renderProjectActions}
+            />
+          ) : null}
           <section className="flex flex-col gap-1.5" aria-label="Title rules">
             <h3 className="text-2xs font-medium text-muted-foreground">Title rules</h3>
             {rules.length === 0 ? (
@@ -362,7 +465,11 @@ export function SidebarEnhancedFilterButton({
               </SelectContent>
             </Select>
           </section>
-          {hasSidebarEnhancedFilterContent(rules, selectedAccountKey) ? (
+          {hasSidebarEnhancedFilterContent(
+            rules,
+            selectedAccountKey,
+            selectedProjectKeys.length,
+          ) ? (
             <div className="flex justify-end border-t border-border pt-2">
               <Button
                 type="button"
@@ -371,6 +478,7 @@ export function SidebarEnhancedFilterButton({
                 onClick={() => {
                   onRulesChange(() => []);
                   onAccountChange(null);
+                  onProjectsClear();
                 }}
               >
                 Clear all
@@ -395,6 +503,8 @@ export function SidebarEnhancedFilterChips({
   accountOptions,
   selectedAccountKey,
   onAccountChange,
+  projects,
+  onProjectToggle,
   hiddenCount,
   onOpenFilter,
 }: {
@@ -404,10 +514,12 @@ export function SidebarEnhancedFilterChips({
   accountOptions: ReadonlyArray<AccountOption>;
   selectedAccountKey: string | null;
   onAccountChange: (key: string | null) => void;
+  projects: ReadonlyArray<ProjectOption>;
+  onProjectToggle: (key: string) => void;
   hiddenCount: number;
   onOpenFilter: () => void;
 }) {
-  if (!hasSidebarEnhancedFilterContent(rules, selectedAccountKey)) return null;
+  if (!hasSidebarEnhancedFilterContent(rules, selectedAccountKey, projects.length)) return null;
   const accountLabel =
     selectedAccountKey === null
       ? null
@@ -416,12 +528,28 @@ export function SidebarEnhancedFilterChips({
   const ruleChips = rules
     .map((rule, index) => ({ rule, number: index + 1 }))
     .filter(({ rule }) => rule.pattern.trim() !== "");
-  const ruleSlots = MAX_CHIPS - (accountLabel === null ? 0 : 1);
-  const shownRules = ruleChips.slice(0, ruleSlots);
-  const moreCount = ruleChips.length - shownRules.length;
+  const chipSlots = MAX_CHIPS - (accountLabel === null ? 0 : 1);
+  const shownProjects = projects.slice(0, chipSlots);
+  const shownRules = ruleChips.slice(0, chipSlots - shownProjects.length);
+  const moreCount = projects.length + ruleChips.length - shownProjects.length - shownRules.length;
 
   return (
     <div className="flex flex-wrap items-center gap-1 px-2 pb-1.5" aria-label="Active filters">
+      {shownProjects.map((project) => (
+        <span key={project.key} className={chipClass}>
+          <button type="button" className={cn(chipButtonClass, "max-w-40")} onClick={onOpenFilter}>
+            {project.label}
+          </button>
+          <button
+            type="button"
+            aria-label={`Remove project filter ${project.label}`}
+            className="cursor-pointer px-1 py-0.5 hover:text-sidebar-foreground"
+            onClick={() => onProjectToggle(project.key)}
+          >
+            <XIcon className="size-3" />
+          </button>
+        </span>
+      ))}
       {accountLabel !== null ? (
         <span className={chipClass}>
           <button type="button" className={cn(chipButtonClass, "max-w-40")} onClick={onOpenFilter}>

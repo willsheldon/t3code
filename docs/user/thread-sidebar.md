@@ -218,9 +218,11 @@ The linked pull request participates in automatic settlement.
 ## Filter the thread list
 
 On web and desktop, the enhanced filter button (the sliders icon beside the
-sidebar search) narrows the list by thread title and by account. It is separate
-from the project filter.
+sidebar search) narrows the list by project, thread title and account. It
+replaces the separate project filter button while it is on.
 
+- **Projects.** Check any number of projects to show only their threads. Each
+  row also has the project's pin and settings controls.
 - **Title rules.** Add up to 20 rules. Each rule either hides threads whose
   title matches, or only shows threads that match. Turn on **.\*** to use a
   regular expression instead of plain text. Matching ignores letter case. A
@@ -232,10 +234,10 @@ from the project filter.
 Press Enter in a rule to add another below it. Press Backspace in an empty rule
 to remove it. Each rule has a switch, so you can turn it off without deleting it.
 
-While a filter is set, chips under the search field show each rule and the
-account. Click a rule's chip to turn it off or on, or click its x to remove it.
-The end of the row shows how many threads are hidden. **Clear all** in the
-filter removes every rule and the account filter.
+While a filter is set, chips under the search field show each project, rule and
+the account. Click a rule's chip to turn it off or on, or click any chip's x to
+remove it. The end of the row shows how many threads are hidden. **Clear all** in
+the filter removes every project, rule and the account filter.
 
 Search and the section counts follow the filters. Expand Settled to load older
 matching threads; its count updates as they load. The thread you have open stays
@@ -248,7 +250,8 @@ If a regular expression makes the sidebar unresponsive, that rule is turned off
 and marked the next time T3 Code starts, so the sidebar always recovers.
 
 To hide the enhanced filter, turn off **Settings → General → Enhanced thread
-filter**. Your rules are kept and come back when you turn it on again.
+filter**. The project filter button comes back and keeps your selected projects.
+Your rules are kept and come back when you turn it on again.
 
 ## Find and reference work
 

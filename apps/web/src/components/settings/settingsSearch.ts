@@ -451,7 +451,9 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "enhanced-thread-filter",
     title: "Enhanced thread filter",
     to: "/settings/general",
-    searchTerms: ["sidebar filter regex regular expression title rules hide only account bots"],
+    searchTerms: [
+      "sidebar filter project projects multiple regex regular expression title rules hide only account bots",
+    ],
   },
   {
     id: "working-shelf",

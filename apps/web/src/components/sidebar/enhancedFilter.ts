@@ -403,11 +403,13 @@ export function sidebarEnhancedFilterButtonLabel(input: {
   readonly rules: Rules;
   readonly accountKey: string | null;
   readonly accountOptions: ReadonlyArray<{ readonly key: string; readonly label: string }>;
+  readonly projectNames: ReadonlyArray<string>;
 }): string {
-  const parts = input.rules.filter(isSidebarTitleRuleLive).map((rule) => {
+  const parts = [...input.projectNames];
+  for (const rule of input.rules.filter(isSidebarTitleRuleLive)) {
     const pattern = rule.pattern.trim();
-    return `${rule.mode} ${rule.regex ? `/${pattern}/` : `"${pattern}"`}`;
-  });
+    parts.push(`${rule.mode} ${rule.regex ? `/${pattern}/` : `"${pattern}"`}`);
+  }
   if (input.accountKey !== null) {
     parts.push(
       input.accountOptions.find((option) => option.key === input.accountKey)?.label ??
@@ -420,11 +422,26 @@ export function sidebarEnhancedFilterButtonLabel(input: {
 export const sidebarEnhancedFilterBadgeCount = (
   compiled: CompiledSidebarTitleRules,
   accountKey: string | null,
-): number => compiled.liveCount + (accountKey === null ? 0 : 1);
+  projectCount: number,
+): number => compiled.liveCount + (accountKey === null ? 0 : 1) + projectCount;
 
 /** Whether the chip row has anything to show, including rules that are off or invalid. */
-export const hasSidebarEnhancedFilterContent = (rules: Rules, accountKey: string | null): boolean =>
-  accountKey !== null || rules.some((rule) => rule.pattern.trim() !== "");
+export const hasSidebarEnhancedFilterContent = (
+  rules: Rules,
+  accountKey: string | null,
+  projectCount: number,
+): boolean =>
+  projectCount > 0 || accountKey !== null || rules.some((rule) => rule.pattern.trim() !== "");
+
+/** Narrows the filter's project list by name. */
+export function filterSidebarProjectOptions<T extends { readonly label: string }>(
+  options: ReadonlyArray<T>,
+  query: string,
+): ReadonlyArray<T> {
+  const needle = query.trim().toLowerCase();
+  if (needle === "") return options;
+  return options.filter((option) => option.label.toLowerCase().includes(needle));
+}
 
 // Unloaded history has no titles to match yet; keep its shelf reachable without counting it as matches.
 export function sidebarSettledFilterCounts(input: {

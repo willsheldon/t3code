@@ -14,6 +14,7 @@ import {
   compileSidebarTitleRules,
   sidebarSettledFilterCounts,
   sidebarSettledPageThreads,
+  filterSidebarProjectOptions,
   hasSidebarEnhancedFilterContent,
   initializeSidebarEnhancedFilter,
   insertSidebarTitleRule,
@@ -381,24 +382,39 @@ describe("labels", () => {
       rule({ id: "c", pattern: "off", enabled: false }),
     ];
     const compiled = compileSidebarTitleRules(rules);
-    expect(sidebarEnhancedFilterButtonLabel({ rules, accountKey: "acct", accountOptions })).toBe(
-      'Enhanced filter: hide "bot-", only /^fix/, Autimo Claude',
-    );
-    expect(sidebarEnhancedFilterButtonLabel({ rules: [], accountKey: null, accountOptions })).toBe(
-      "Enhanced filter",
-    );
     expect(
-      sidebarEnhancedFilterButtonLabel({ rules: [], accountKey: "gone", accountOptions }),
+      sidebarEnhancedFilterButtonLabel({
+        rules,
+        accountKey: "acct",
+        accountOptions,
+        projectNames: [],
+      }),
+    ).toBe('Enhanced filter: hide "bot-", only /^fix/, Autimo Claude');
+    expect(
+      sidebarEnhancedFilterButtonLabel({
+        rules: [],
+        accountKey: null,
+        accountOptions,
+        projectNames: [],
+      }),
+    ).toBe("Enhanced filter");
+    expect(
+      sidebarEnhancedFilterButtonLabel({
+        rules: [],
+        accountKey: "gone",
+        accountOptions,
+        projectNames: [],
+      }),
     ).toBe("Enhanced filter: Unavailable account");
-    expect(sidebarEnhancedFilterBadgeCount(compiled, "acct")).toBe(3);
+    expect(sidebarEnhancedFilterBadgeCount(compiled, "acct", 0)).toBe(3);
   });
 
   it("has content for any non-blank rule or an account", () => {
     expect(
-      hasSidebarEnhancedFilterContent([rule({ id: "a", enabled: false, pattern: "x" })], null),
+      hasSidebarEnhancedFilterContent([rule({ id: "a", enabled: false, pattern: "x" })], null, 0),
     ).toBe(true);
-    expect(hasSidebarEnhancedFilterContent([rule({ id: "a" })], null)).toBe(false);
-    expect(hasSidebarEnhancedFilterContent([], "acct")).toBe(true);
+    expect(hasSidebarEnhancedFilterContent([rule({ id: "a" })], null, 0)).toBe(false);
+    expect(hasSidebarEnhancedFilterContent([], "acct", 0)).toBe(true);
   });
 });
 
@@ -473,5 +489,37 @@ describe("sidebarSettledPageThreads", () => {
       listedThreads: [scanned[0]],
       growthThreads: [scanned[0]],
     });
+  });
+});
+
+describe("enhanced filter projects", () => {
+  const options = [
+    { key: "env:a", label: "Alpha" },
+    { key: "env:b", label: "Beta Tools" },
+  ];
+
+  it("counts every selected project in the badge and content check", () => {
+    const compiled = compileSidebarTitleRules([]);
+    expect(sidebarEnhancedFilterBadgeCount(compiled, null, 2)).toBe(2);
+    expect(sidebarEnhancedFilterBadgeCount(compiled, "acct", 2)).toBe(3);
+    expect(hasSidebarEnhancedFilterContent([], null, 1)).toBe(true);
+    expect(hasSidebarEnhancedFilterContent([], null, 0)).toBe(false);
+  });
+
+  it("names selected projects in the button label", () => {
+    expect(
+      sidebarEnhancedFilterButtonLabel({
+        rules: [],
+        accountKey: null,
+        accountOptions: [],
+        projectNames: ["Alpha", "Beta Tools"],
+      }),
+    ).toBe("Enhanced filter: Alpha, Beta Tools");
+  });
+
+  it("matches project names ignoring case and outer spaces", () => {
+    expect(filterSidebarProjectOptions(options, "  beta ")).toEqual([options[1]]);
+    expect(filterSidebarProjectOptions(options, "")).toEqual(options);
+    expect(filterSidebarProjectOptions(options, "missing")).toEqual([]);
   });
 });
