@@ -237,10 +237,18 @@ export function ProjectFilterSection({
 }) {
   const [query, setQuery] = useState("");
   // `data-highlighted` is what reveals an unpinned ProjectPinButton, as a menu item does.
-  const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+  const [focusedKey, setFocusedKey] = useState<string | null>(null);
+  const shortcutKey = hoveredKey ?? focusedKey;
   const shownOptions = filterSidebarProjectOptions(options, query);
   return (
-    <section className="flex flex-col gap-1.5" aria-label="Projects">
+    <section
+      className="flex flex-col gap-1.5"
+      aria-label="Projects"
+      onKeyDown={(event) => {
+        if (shortcutKey !== null) onRowKeyDown(shortcutKey, event);
+      }}
+    >
       <h3 className="text-2xs font-medium text-muted-foreground">Projects</h3>
       {options.length > PROJECT_SEARCH_THRESHOLD ? (
         <InputGroup>
@@ -261,13 +269,14 @@ export function ProjectFilterSection({
             return (
               <div
                 key={option.key}
-                data-highlighted={highlightedKey === option.key ? "" : undefined}
+                data-highlighted={
+                  hoveredKey === option.key || focusedKey === option.key ? "" : undefined
+                }
                 className="flex items-center rounded-md data-highlighted:bg-accent"
-                onPointerEnter={() => setHighlightedKey(option.key)}
-                onPointerLeave={() => setHighlightedKey(null)}
-                onFocus={() => setHighlightedKey(option.key)}
-                onBlur={() => setHighlightedKey(null)}
-                onKeyDown={(event) => onRowKeyDown(option.key, event)}
+                onPointerEnter={() => setHoveredKey(option.key)}
+                onPointerLeave={() => setHoveredKey(null)}
+                onFocus={() => setFocusedKey(option.key)}
+                onBlur={() => setFocusedKey(null)}
                 onContextMenu={(event) => onRowContextMenu(option.key, event)}
               >
                 <button
@@ -403,14 +412,15 @@ export function SidebarEnhancedFilterButton({
           </span>
         ) : null}
       </PopoverTrigger>
+      {/* The thread pin shortcut stands down inside this marker; see useThreadLifecycle. */}
       <PopoverPopup
+        data-sidebar-enhanced-filter
         align="end"
         side="bottom"
         className="w-[min(22rem,var(--available-width))]"
         initialFocus={() => inputs.current.get(rules[0]?.id ?? "") ?? addButtonRef.current}
       >
-        {/* The thread pin shortcut stands down inside this marker; see useThreadLifecycle. */}
-        <div className="flex flex-col gap-3" data-sidebar-enhanced-filter>
+        <div className="flex flex-col gap-3">
           {projectOptions.length > 0 ? (
             <ProjectFilterSection
               options={projectOptions}
@@ -476,7 +486,11 @@ export function SidebarEnhancedFilterButton({
               <SelectTrigger size="compact" aria-label="Account">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent alignItemWithTrigger={false} matchTriggerWidth={false}>
+              <SelectContent
+                data-sidebar-enhanced-filter
+                alignItemWithTrigger={false}
+                matchTriggerWidth={false}
+              >
                 {accountItems.map((item) => (
                   <SelectItem
                     key={item.value}
