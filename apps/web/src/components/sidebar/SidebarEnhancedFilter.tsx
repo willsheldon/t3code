@@ -7,6 +7,7 @@
 import { CheckIcon, PlusIcon, SlidersHorizontalIcon, XIcon } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useEffect,
   useRef,
@@ -217,20 +218,26 @@ function TitleRuleRow({
 }
 
 /** Checkbox rows for the project scope. Each row toggles on its own, so several can stay on. */
-function ProjectFilterSection({
+export function ProjectFilterSection({
   options,
   selectedKeys,
   onToggle,
+  onRowKeyDown,
+  onRowContextMenu,
   renderIcon,
   renderActions,
 }: {
   options: ReadonlyArray<ProjectOption>;
   selectedKeys: ReadonlyArray<string>;
   onToggle: (key: string) => void;
+  onRowKeyDown: (key: string, event: ReactKeyboardEvent<HTMLElement>) => void;
+  onRowContextMenu: (key: string, event: ReactMouseEvent<HTMLElement>) => void;
   renderIcon: (key: string) => ReactNode;
   renderActions: (key: string) => ReactNode;
 }) {
   const [query, setQuery] = useState("");
+  // `data-highlighted` is what reveals an unpinned ProjectPinButton, as a menu item does.
+  const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const shownOptions = filterSidebarProjectOptions(options, query);
   return (
     <section className="flex flex-col gap-1.5" aria-label="Projects">
@@ -252,7 +259,17 @@ function ProjectFilterSection({
           {shownOptions.map((option) => {
             const selected = selectedKeys.includes(option.key);
             return (
-              <div key={option.key} className="flex items-center rounded-md hover:bg-accent">
+              <div
+                key={option.key}
+                data-highlighted={highlightedKey === option.key ? "" : undefined}
+                className="flex items-center rounded-md data-highlighted:bg-accent"
+                onPointerEnter={() => setHighlightedKey(option.key)}
+                onPointerLeave={() => setHighlightedKey(null)}
+                onFocus={() => setHighlightedKey(option.key)}
+                onBlur={() => setHighlightedKey(null)}
+                onKeyDown={(event) => onRowKeyDown(option.key, event)}
+                onContextMenu={(event) => onRowContextMenu(option.key, event)}
+              >
                 <button
                   type="button"
                   role="checkbox"
@@ -294,6 +311,8 @@ export function SidebarEnhancedFilterButton({
   selectedProjectNames,
   onProjectToggle,
   onProjectsClear,
+  onProjectKeyDown,
+  onProjectContextMenu,
   renderProjectIcon,
   renderProjectActions,
   open,
@@ -310,6 +329,8 @@ export function SidebarEnhancedFilterButton({
   selectedProjectNames: ReadonlyArray<string>;
   onProjectToggle: (key: string) => void;
   onProjectsClear: () => void;
+  onProjectKeyDown: (key: string, event: ReactKeyboardEvent<HTMLElement>) => void;
+  onProjectContextMenu: (key: string, event: ReactMouseEvent<HTMLElement>) => void;
   renderProjectIcon: (key: string) => ReactNode;
   renderProjectActions: (key: string) => ReactNode;
   open: boolean;
@@ -332,7 +353,7 @@ export function SidebarEnhancedFilterButton({
   const badgeCount = sidebarEnhancedFilterBadgeCount(
     compiled,
     selectedAccountKey,
-    selectedProjectKeys.length,
+    selectedProjectNames.length,
   );
   const atLimit = rules.length >= SIDEBAR_TITLE_RULE_LIMIT;
   const accountMissing =
@@ -388,12 +409,15 @@ export function SidebarEnhancedFilterButton({
         className="w-[min(22rem,var(--available-width))]"
         initialFocus={() => inputs.current.get(rules[0]?.id ?? "") ?? addButtonRef.current}
       >
-        <div className="flex flex-col gap-3">
+        {/* The thread pin shortcut stands down inside this marker; see useThreadLifecycle. */}
+        <div className="flex flex-col gap-3" data-sidebar-enhanced-filter>
           {projectOptions.length > 0 ? (
             <ProjectFilterSection
               options={projectOptions}
               selectedKeys={selectedProjectKeys}
               onToggle={onProjectToggle}
+              onRowKeyDown={onProjectKeyDown}
+              onRowContextMenu={onProjectContextMenu}
               renderIcon={renderProjectIcon}
               renderActions={renderProjectActions}
             />
@@ -468,7 +492,7 @@ export function SidebarEnhancedFilterButton({
           {hasSidebarEnhancedFilterContent(
             rules,
             selectedAccountKey,
-            selectedProjectKeys.length,
+            selectedProjectNames.length,
           ) ? (
             <div className="flex justify-end border-t border-border pt-2">
               <Button

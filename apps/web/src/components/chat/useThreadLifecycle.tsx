@@ -668,7 +668,9 @@ export function useThreadLifecycle(input: ThreadLifecycleInput) {
       // An open project list pins its highlighted project with this key instead.
       if (
         event.target instanceof Element &&
-        event.target.closest('[role="combobox"][aria-expanded="true"]') !== null
+        event.target.closest(
+          '[role="combobox"][aria-expanded="true"], [data-sidebar-enhanced-filter]',
+        ) !== null
       ) {
         return false;
       }

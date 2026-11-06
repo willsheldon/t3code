@@ -1385,7 +1385,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   } = useProjectPin();
   const handleProjectSettings = useStableCallback(
     (
-      event: ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLInputElement>,
+      event: ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLElement>,
       projectGroup: SidebarProjectSnapshot,
     ) => {
       event.preventDefault();
@@ -3137,7 +3137,32 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                     selectedProjectKeys={projectScopeKeys}
                     selectedProjectNames={scopedProjectGroups.map((project) => project.displayName)}
                     onProjectToggle={toggleProjectScopeKey}
-                    onProjectsClear={() => setProjectScopeKeys([])}
+                    onProjectsClear={() =>
+                      // Keys of environments that are not live stay stored, as they do elsewhere.
+                      setProjectScopeKeys(
+                        projectScopeKeys.filter(
+                          (key) => !scopedProjectGroups.some((group) => group.projectKey === key),
+                        ),
+                      )
+                    }
+                    onProjectKeyDown={(key, event) => {
+                      const project = projectGroupByScopeKey.get(key);
+                      if (!project) return;
+                      if (canPinProject(project) && isProjectPinShortcut(event, keybindings)) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        toggleProjectGroupPin(project);
+                      } else if (
+                        event.key === "ContextMenu" ||
+                        (event.shiftKey && event.key === "F10")
+                      ) {
+                        handleProjectSettings(event, project);
+                      }
+                    }}
+                    onProjectContextMenu={(key, event) => {
+                      const project = projectGroupByScopeKey.get(key);
+                      if (project) handleProjectSettings(event, project);
+                    }}
                     renderProjectIcon={(key) => {
                       const project = projectGroupByScopeKey.get(key);
                       return project ? (

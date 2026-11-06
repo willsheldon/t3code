@@ -151,7 +151,7 @@ When you select assistant text, the menu under **Cite** lists your quick replies
 the selection with the reply as the quote's comment, the same place a comment you type on **Cite**
 goes, so you only need to review and send.
 
-The composer footer has a matching **Quick replies** button next to **Attach files**. Choosing a
+The composer footer has a matching **Quick replies** button beside the send button. Choosing a
 reply there adds it after whatever is already in the composer and sends the message right away,
 exactly as pressing Enter would: while the agent is working, it follows your follow-up setting, and
 while you edit a queued message, it updates that message.
