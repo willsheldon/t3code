@@ -63,8 +63,6 @@ export function formatAssistantCitationReplyForComposer(
 }
 
 export interface ComposerQuickReplyAvailability {
-  /** The composer editor itself cannot take new text right now. */
-  isConnecting: boolean;
   isComposerApprovalState: boolean;
   hasPendingUserInput: boolean;
   projectSelectionRequired: boolean;
@@ -82,7 +80,6 @@ export interface ComposerQuickReplyAvailability {
  */
 export function isComposerQuickReplyActionDisabled(input: ComposerQuickReplyAvailability): boolean {
   return (
-    input.isConnecting ||
     input.isComposerApprovalState ||
     input.hasPendingUserInput ||
     input.projectSelectionRequired ||

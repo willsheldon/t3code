@@ -3,7 +3,7 @@ import { useStableCallback } from "./useStableCallback";
 import { scrollToSettingsTarget } from "~/components/settings/settingsLayout";
 
 /** Matches the settings search catalog id and row id in SettingsPanels.tsx. */
-export const SELECTION_QUICK_REPLIES_SETTINGS_ANCHOR = "selection-quick-replies";
+const SELECTION_QUICK_REPLIES_SETTINGS_ANCHOR = "selection-quick-replies";
 
 /**
  * Every "Edit list" entry point (the selection toolbar, the composer menu)

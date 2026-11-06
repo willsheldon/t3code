@@ -182,7 +182,7 @@ import {
   filterSidebarV2VisibleThreads,
   groupSidebarThreadsByProject,
   sidebarFolderExpansionKeys,
-  isSidebarSubagentThread,
+  isSidebarHiddenThread,
   sidebarThreadAccountKey,
   buildBulkTitleRegenerationContextMenuItem,
   buildBulkUnpinContextMenuItem,
@@ -703,11 +703,7 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
     disconnectedEnvironmentIds,
   } = input;
   const preciseNow = new Date().toISOString();
-  const inScope = filterSidebarV2VisibleThreads(
-    threads,
-    scopedProjectKeys,
-    delegatedUnderParent,
-  );
+  const inScope = filterSidebarV2VisibleThreads(threads, scopedProjectKeys, delegatedUnderParent);
   const threadFiltersActive =
     input.enhancedFilterEnabled &&
     (input.compiledTitleRules.liveCount > 0 || input.selectedAccountKey !== null);
@@ -1215,7 +1211,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const accountOptions = (() => {
     const options = new Map<string, { key: string; label: string }>();
     for (const thread of threads) {
-      if (thread.archivedAt !== null || isSidebarSubagentThread(thread)) continue;
+      if (thread.archivedAt !== null || isSidebarHiddenThread(thread)) continue;
       const key = sidebarThreadAccountKey(thread);
       if (options.has(key)) continue;
       const name =
@@ -1256,7 +1252,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const enhancedFilterKey = enhancedFilterEnabled
     ? JSON.stringify([compiledTitleRules.liveKey, selectedAccountKey])
     : "";
-  // oxlint-disable-next-line t3code/react-effect-budget -- Persisted filters can change outside a sidebar event handler.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Persisted filters can change outside a sidebar event handler, and the selection store must follow them.
   useEffect(() => {
     clearSelection();
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- A changed filter invalidates selection even when the clear function is stable.

@@ -13,7 +13,7 @@ export const SIDEBAR_ENHANCED_FILTER_KEY = "t3code:sidebar:enhanced-filter";
 export const SIDEBAR_ENHANCED_FILTER_PASS_KEY = "t3code:sidebar:enhanced-filter:pass";
 export const LEGACY_SIDEBAR_TITLE_FILTER_KEY = "t3code:sidebar:title-filter";
 export const SIDEBAR_TITLE_RULE_LIMIT = 20;
-export const SIDEBAR_FILTER_GUARD_MIN_AGE_MS = 2_000;
+const SIDEBAR_FILTER_GUARD_MIN_AGE_MS = 2_000;
 export const SIDEBAR_FILTER_GUARD_MESSAGE =
   "Turned off: this pattern made the sidebar unresponsive.";
 
@@ -90,7 +90,7 @@ function compileRegex(pattern: string): RegExp | string {
 }
 
 /** Whether a rule currently filters: on, not tripped, non-blank, and valid. */
-export function isSidebarTitleRuleLive(rule: SidebarTitleRule): boolean {
+function isSidebarTitleRuleLive(rule: SidebarTitleRule): boolean {
   if (!rule.enabled || rule.tripped || rule.pattern.trim() === "") return false;
   return !rule.regex || typeof compileRegex(rule.pattern) !== "string";
 }
