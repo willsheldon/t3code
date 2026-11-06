@@ -149,7 +149,6 @@ describe("sendComposerQuickReply", () => {
 
 describe("isComposerQuickReplyActionDisabled", () => {
   const available = {
-    isConnecting: false,
     isComposerApprovalState: false,
     hasPendingUserInput: false,
     projectSelectionRequired: false,
@@ -164,7 +163,6 @@ describe("isComposerQuickReplyActionDisabled", () => {
   });
 
   it.each([
-    { isConnecting: true },
     { isComposerApprovalState: true },
     { hasPendingUserInput: true },
     { projectSelectionRequired: true },

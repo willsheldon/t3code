@@ -2678,7 +2678,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   // The quick-replies button mirrors the send button's own disabled state:
   // a reply it inserts would otherwise sit in the composer unsent.
   const composerQuickReplyActionDisabled = isComposerQuickReplyActionDisabled({
-    isConnecting,
     isComposerApprovalState,
     hasPendingUserInput: pendingUserInputs.length > 0,
     projectSelectionRequired,
