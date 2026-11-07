@@ -3448,6 +3448,12 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                   label: project.displayName,
                 }))}
                 onProjectToggle={toggleProjectScopeKey}
+                renderProjectIcon={(key) => {
+                  const project = projectGroupByScopeKey.get(key);
+                  return project ? (
+                    <ProjectFavicon project={project} className="size-3.5 shrink-0" />
+                  ) : null;
+                }}
                 hiddenCount={enhancedHiddenCount}
                 onOpenFilter={() => setEnhancedFilterOpen(true)}
               />

@@ -543,6 +543,7 @@ export function SidebarEnhancedFilterChips({
   onAccountChange,
   projects,
   onProjectToggle,
+  renderProjectIcon,
   hiddenCount,
   onOpenFilter,
 }: {
@@ -554,6 +555,8 @@ export function SidebarEnhancedFilterChips({
   onAccountChange: (key: string | null) => void;
   projects: ReadonlyArray<ProjectOption>;
   onProjectToggle: (key: string) => void;
+  /** Project chips show this icon in place of the project name; the name stays as label and tooltip. */
+  renderProjectIcon: (key: string) => ReactNode;
   hiddenCount: number;
   onOpenFilter: () => void;
 }) {
@@ -575,9 +578,21 @@ export function SidebarEnhancedFilterChips({
     <div className="flex flex-wrap items-center gap-1 px-2 pb-1.5" aria-label="Active filters">
       {shownProjects.map((project) => (
         <span key={project.key} className={chipClass}>
-          <button type="button" className={cn(chipButtonClass, "max-w-40")} onClick={onOpenFilter}>
-            {project.label}
-          </button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label={project.label}
+                  className={cn(chipButtonClass, "flex items-center")}
+                  onClick={onOpenFilter}
+                />
+              }
+            >
+              {renderProjectIcon(project.key) ?? project.label}
+            </TooltipTrigger>
+            <TooltipPopup side="top">{project.label}</TooltipPopup>
+          </Tooltip>
           <button
             type="button"
             aria-label={`Remove project filter ${project.label}`}
