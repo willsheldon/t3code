@@ -1,6 +1,6 @@
 /**
- * The enhanced thread filter: a header button whose popover edits projects,
- * title rules and the account, and a chip row under the search field that keeps active
+ * The enhanced thread filter: a header button whose popover edits status,
+ * projects, the account and title rules, and a chip row under the search field that keeps active
  * filters visible and one click from off. State lives in the sidebar; this file
  * only renders it through the helpers in `enhancedFilter.ts`.
  */
@@ -17,7 +17,7 @@ import {
 import { cn, randomUUID } from "~/lib/utils";
 import { SIDEBAR_UNAVAILABLE_ACCOUNT_LABEL } from "../Sidebar.logic";
 import { Button } from "../ui/button";
-import { InputGroup, InputGroupInput } from "../ui/input-group";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
@@ -26,7 +26,10 @@ import { Toggle as ToggleGroupItem, ToggleGroup } from "../ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   type CompiledSidebarTitleRules,
+  SIDEBAR_STATUS_OPTIONS,
   SIDEBAR_TITLE_RULE_LIMIT,
+  type SidebarStatusCounts,
+  type SidebarStatusFilter,
   type SidebarTitleRule,
   filterSidebarProjectOptions,
   hasSidebarEnhancedFilterContent,
@@ -37,6 +40,7 @@ import {
   setSidebarTitleRulePattern,
   sidebarEnhancedFilterBadgeCount,
   sidebarEnhancedFilterButtonLabel,
+  sidebarStatusOption,
   sidebarTitleRuleFocusAfterRemoval,
   sidebarTitleRuleText,
   updateSidebarTitleRule,
@@ -50,6 +54,39 @@ type RulesUpdate = (rules: ReadonlyArray<SidebarTitleRule>) => ReadonlyArray<Sid
 const PATTERN_SAVE_DELAY_MS = 150;
 const MAX_CHIPS = 6;
 const PROJECT_SEARCH_THRESHOLD = 8;
+const sectionClass = "flex flex-col gap-1.5 px-3 py-2.5";
+
+function FilterSectionHeader({
+  title,
+  id,
+  count = 0,
+  action,
+}: {
+  title: string;
+  id?: string;
+  count?: number;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex min-h-5 items-center gap-1.5">
+      <h3 id={id} className="text-2xs font-medium text-muted-foreground">
+        {title}
+      </h3>
+      {count > 0 ? (
+        <span className="text-2xs tabular-nums text-muted-foreground/70">{count}</span>
+      ) : null}
+      {action ? <div className="ms-auto">{action}</div> : null}
+    </div>
+  );
+}
+
+function SectionClearButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <Button type="button" size="micro" variant="ghost-muted" aria-label={label} onClick={onClick}>
+      Clear
+    </Button>
+  );
+}
 
 /**
  * Keeps a pattern field's text local and saves it after a short pause. Saving
@@ -178,26 +215,28 @@ function TitleRuleRow({
               }
             }}
           />
-        </InputGroup>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                size="xs"
-                pressed={rule.regex}
-                onPressedChange={(pressed) =>
-                  onRulesChange((rules) =>
-                    updateSidebarTitleRule(rules, rule.id, { regex: pressed, tripped: false }),
-                  )
+          <InputGroupAddon align="inline-end">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Toggle
+                    size="xs"
+                    pressed={rule.regex}
+                    onPressedChange={(pressed) =>
+                      onRulesChange((rules) =>
+                        updateSidebarTitleRule(rules, rule.id, { regex: pressed, tripped: false }),
+                      )
+                    }
+                    aria-label={`Rule ${number} use regular expression`}
+                  />
                 }
-                aria-label={`Rule ${number} use regular expression`}
-              />
-            }
-          >
-            <span className="font-mono">.*</span>
-          </TooltipTrigger>
-          <TooltipPopup side="top">Use regular expression</TooltipPopup>
-        </Tooltip>
+              >
+                <span className="font-mono">.*</span>
+              </TooltipTrigger>
+              <TooltipPopup side="top">Use regular expression</TooltipPopup>
+            </Tooltip>
+          </InputGroupAddon>
+        </InputGroup>
         <Button
           type="button"
           size="icon-xs"
@@ -217,11 +256,86 @@ function TitleRuleRow({
   );
 }
 
+/** Multi-select thread status: a thread shows when it is in any selected status. */
+export function StatusFilterSection({
+  selected,
+  counts,
+  doneHasMore,
+  onToggle,
+  onClear,
+  firstOptionRef,
+}: {
+  selected: ReadonlyArray<SidebarStatusFilter>;
+  /** Null until the popover needs them; counting walks every thread. */
+  counts: SidebarStatusCounts | null;
+  /** Older settled threads are not loaded, so the Done count is a lower bound. */
+  doneHasMore: boolean;
+  onToggle: (status: SidebarStatusFilter) => void;
+  onClear: () => void;
+  firstOptionRef?: (element: HTMLButtonElement | null) => void;
+}) {
+  return (
+    <section className={sectionClass} aria-label="Status">
+      <FilterSectionHeader
+        title="Status"
+        count={selected.length}
+        action={
+          selected.length > 0 ? (
+            <SectionClearButton label="Clear status filters" onClick={onClear} />
+          ) : null
+        }
+      />
+      <div role="group" aria-label="Status" className="grid grid-cols-2 gap-1">
+        {SIDEBAR_STATUS_OPTIONS.map((option, index) => {
+          const isSelected = selected.includes(option.value);
+          const count = counts?.[option.value];
+          return (
+            <Tooltip key={option.value}>
+              <TooltipTrigger
+                render={
+                  <button
+                    ref={index === 0 ? firstOptionRef : undefined}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={isSelected}
+                    className={cn(
+                      "flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-input px-2 text-xs outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring pointer-coarse:h-9",
+                      isSelected && "border-primary/50 bg-primary/10 font-medium",
+                    )}
+                    onClick={() => onToggle(option.value)}
+                  />
+                }
+              >
+                <span aria-hidden className="flex size-3 shrink-0 items-center justify-center">
+                  {isSelected ? (
+                    <CheckIcon className="size-3 text-primary" />
+                  ) : (
+                    <span className={cn("size-1.5 rounded-full", option.dotClass)} />
+                  )}
+                </span>
+                <span className="truncate">{option.label}</span>
+                {count === undefined ? null : (
+                  <span className="ms-auto text-2xs font-normal tabular-nums text-muted-foreground">
+                    {count}
+                    {option.value === "done" && doneHasMore ? "+" : ""}
+                  </span>
+                )}
+              </TooltipTrigger>
+              <TooltipPopup side="top">{option.description}</TooltipPopup>
+            </Tooltip>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 /** Checkbox rows for the project scope. Each row toggles on its own, so several can stay on. */
 export function ProjectFilterSection({
   options,
   selectedKeys,
   onToggle,
+  onClear,
   onRowKeyDown,
   onRowContextMenu,
   renderIcon,
@@ -230,6 +344,7 @@ export function ProjectFilterSection({
   options: ReadonlyArray<ProjectOption>;
   selectedKeys: ReadonlyArray<string>;
   onToggle: (key: string) => void;
+  onClear?: () => void;
   onRowKeyDown: (key: string, event: ReactKeyboardEvent<HTMLElement>) => void;
   onRowContextMenu: (key: string, event: ReactMouseEvent<HTMLElement>) => void;
   renderIcon: (key: string) => ReactNode;
@@ -241,15 +356,24 @@ export function ProjectFilterSection({
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const shortcutKey = hoveredKey ?? focusedKey;
   const shownOptions = filterSidebarProjectOptions(options, query);
+  const selectedCount = options.filter((option) => selectedKeys.includes(option.key)).length;
   return (
     <section
-      className="flex flex-col gap-1.5"
+      className={sectionClass}
       aria-label="Projects"
       onKeyDown={(event) => {
         if (shortcutKey !== null) onRowKeyDown(shortcutKey, event);
       }}
     >
-      <h3 className="text-2xs font-medium text-muted-foreground">Projects</h3>
+      <FilterSectionHeader
+        title="Projects"
+        count={selectedCount}
+        action={
+          onClear && selectedCount > 0 ? (
+            <SectionClearButton label="Clear project filters" onClick={onClear} />
+          ) : null
+        }
+      />
       {options.length > PROJECT_SEARCH_THRESHOLD ? (
         <InputGroup>
           <InputGroupInput
@@ -326,7 +450,19 @@ export function SidebarEnhancedFilterButton({
   renderProjectActions,
   open,
   onOpenChange,
+  statuses,
+  statusCounts,
+  doneHasMore,
+  onStatusToggle,
+  onStatusesClear,
+  hiddenCount,
 }: {
+  statuses: ReadonlyArray<SidebarStatusFilter>;
+  statusCounts: SidebarStatusCounts | null;
+  doneHasMore: boolean;
+  onStatusToggle: (status: SidebarStatusFilter) => void;
+  onStatusesClear: () => void;
+  hiddenCount: number;
   rules: ReadonlyArray<SidebarTitleRule>;
   compiled: CompiledSidebarTitleRules;
   onRulesChange: (update: RulesUpdate) => void;
@@ -347,6 +483,7 @@ export function SidebarEnhancedFilterButton({
 }) {
   const inputs = useRef(new Map<string, HTMLInputElement>());
   const addButtonRef = useRef<HTMLButtonElement>(null);
+  const firstStatusRef = useRef<HTMLButtonElement | null>(null);
   // A rule id, "add" for the add button, or null. A ref, not state: the rule
   // change that goes with it already re-renders, and focus follows that commit.
   const pendingFocusRef = useRef<string | null>(null);
@@ -363,6 +500,13 @@ export function SidebarEnhancedFilterButton({
     compiled,
     selectedAccountKey,
     selectedProjectNames.length,
+    statuses.length,
+  );
+  const canClear = hasSidebarEnhancedFilterContent(
+    rules,
+    selectedAccountKey,
+    selectedProjectNames.length,
+    statuses.length,
   );
   const atLimit = rules.length >= SIDEBAR_TITLE_RULE_LIMIT;
   const accountMissing =
@@ -396,6 +540,7 @@ export function SidebarEnhancedFilterButton({
               accountKey: selectedAccountKey,
               accountOptions,
               projectNames: selectedProjectNames,
+              statuses,
             })}
           />
         }
@@ -417,112 +562,139 @@ export function SidebarEnhancedFilterButton({
         data-sidebar-enhanced-filter
         align="end"
         side="bottom"
-        className="w-[min(22rem,var(--available-width))]"
-        initialFocus={() => inputs.current.get(rules[0]?.id ?? "") ?? addButtonRef.current}
+        padding="none"
+        className="w-[min(23rem,var(--available-width))]"
+        initialFocus={() => firstStatusRef.current}
       >
-        <div className="flex flex-col gap-3">
-          {projectOptions.length > 0 ? (
-            <ProjectFilterSection
-              options={projectOptions}
-              selectedKeys={selectedProjectKeys}
-              onToggle={onProjectToggle}
-              onRowKeyDown={onProjectKeyDown}
-              onRowContextMenu={onProjectContextMenu}
-              renderIcon={renderProjectIcon}
-              renderActions={renderProjectActions}
-            />
-          ) : null}
-          <section className="flex flex-col gap-1.5" aria-label="Title rules">
-            <h3 className="text-2xs font-medium text-muted-foreground">Title rules</h3>
-            {rules.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Hide or show threads by title.</p>
-            ) : (
-              rules.map((rule, index) => (
-                <TitleRuleRow
-                  key={rule.id}
-                  rule={rule}
-                  number={index + 1}
-                  error={compiled.errors.get(rule.id)}
-                  canInsert={!atLimit}
-                  inputRef={(element) => {
-                    if (element) inputs.current.set(rule.id, element);
-                    else inputs.current.delete(rule.id);
-                  }}
-                  onRulesChange={onRulesChange}
-                  onInsertAfter={() => insertAfter(rule.id)}
-                  onRemove={() => remove(rule.id)}
-                />
-              ))
-            )}
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    ref={addButtonRef}
-                    type="button"
-                    size="xs"
-                    variant="ghost"
-                    className="self-start"
-                    disabled={atLimit}
-                    onClick={() => insertAfter(null)}
-                  />
-                }
-              >
-                <PlusIcon className="size-3.5" />
-                Add rule
-              </TooltipTrigger>
-              {atLimit ? (
-                <TooltipPopup side="top">{SIDEBAR_TITLE_RULE_LIMIT} rules maximum</TooltipPopup>
-              ) : null}
-            </Tooltip>
-          </section>
-          <section className="flex flex-col gap-1.5" aria-label="Account">
-            <h3 className="text-2xs font-medium text-muted-foreground">Account</h3>
-            <Select
-              items={accountItems}
-              value={selectedAccountKey ?? ""}
-              onValueChange={(value) => onAccountChange(value ? String(value) : null)}
+        <div className="flex max-h-[min(40rem,var(--available-height))] flex-col">
+          <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+            <h2 className="text-xs font-medium">Filters</h2>
+            {hiddenCount > 0 ? (
+              <span className="text-2xs tabular-nums text-muted-foreground">
+                {hiddenCount} hidden
+              </span>
+            ) : null}
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              className="ms-auto"
+              disabled={!canClear}
+              onClick={() => {
+                onRulesChange(() => []);
+                onAccountChange(null);
+                onProjectsClear();
+                onStatusesClear();
+              }}
             >
-              <SelectTrigger size="compact" aria-label="Account">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent
-                data-sidebar-enhanced-filter
-                alignItemWithTrigger={false}
-                matchTriggerWidth={false}
-              >
-                {accountItems.map((item) => (
-                  <SelectItem
-                    key={item.value}
-                    value={item.value}
-                    disabled={accountMissing && item.value === selectedAccountKey}
+              Clear all
+            </Button>
+          </div>
+          <div className="flex min-h-0 flex-col divide-y divide-border/60 overflow-y-auto">
+            <StatusFilterSection
+              selected={statuses}
+              counts={statusCounts}
+              doneHasMore={doneHasMore}
+              onToggle={onStatusToggle}
+              onClear={onStatusesClear}
+              firstOptionRef={(element) => {
+                firstStatusRef.current = element;
+              }}
+            />
+            {projectOptions.length > 0 ? (
+              <ProjectFilterSection
+                options={projectOptions}
+                selectedKeys={selectedProjectKeys}
+                onToggle={onProjectToggle}
+                onClear={onProjectsClear}
+                onRowKeyDown={onProjectKeyDown}
+                onRowContextMenu={onProjectContextMenu}
+                renderIcon={renderProjectIcon}
+                renderActions={renderProjectActions}
+              />
+            ) : null}
+            {accountOptions.length > 1 || selectedAccountKey !== null ? (
+              <section className="flex items-center gap-3 px-3 py-2.5" aria-label="Account">
+                <h3 className="shrink-0 text-2xs font-medium text-muted-foreground">Account</h3>
+                <div className="min-w-0 flex-1">
+                  <Select
+                    items={accountItems}
+                    value={selectedAccountKey ?? ""}
+                    onValueChange={(value) => onAccountChange(value ? String(value) : null)}
                   >
-                    <span className="truncate">{item.label}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </section>
-          {hasSidebarEnhancedFilterContent(
-            rules,
-            selectedAccountKey,
-            selectedProjectNames.length,
-          ) ? (
-            <div className="flex justify-end border-t border-border pt-2">
-              <Button
-                type="button"
-                size="xs"
-                variant="ghost"
-                onClick={() => {
-                  onRulesChange(() => []);
-                  onAccountChange(null);
-                  onProjectsClear();
-                }}
-              >
-                Clear all
-              </Button>
-            </div>
-          ) : null}
+                    <SelectTrigger size="compact" aria-label="Account">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent
+                      data-sidebar-enhanced-filter
+                      alignItemWithTrigger={false}
+                      matchTriggerWidth={false}
+                    >
+                      {accountItems.map((item) => (
+                        <SelectItem
+                          key={item.value}
+                          value={item.value}
+                          disabled={accountMissing && item.value === selectedAccountKey}
+                        >
+                          <span className="truncate">{item.label}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </section>
+            ) : null}
+            <section className={sectionClass} aria-label="Title rules">
+              <FilterSectionHeader
+                title="Title rules"
+                count={compiled.liveCount}
+                action={
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          ref={addButtonRef}
+                          type="button"
+                          size="micro"
+                          variant="ghost-muted"
+                          disabled={atLimit}
+                          onClick={() => insertAfter(null)}
+                        />
+                      }
+                    >
+                      <PlusIcon className="size-3" />
+                      Add rule
+                    </TooltipTrigger>
+                    {atLimit ? (
+                      <TooltipPopup side="top">
+                        {SIDEBAR_TITLE_RULE_LIMIT} rules maximum
+                      </TooltipPopup>
+                    ) : null}
+                  </Tooltip>
+                }
+              />
+              {rules.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Hide or show threads by title.</p>
+              ) : (
+                rules.map((rule, index) => (
+                  <TitleRuleRow
+                    key={rule.id}
+                    rule={rule}
+                    number={index + 1}
+                    error={compiled.errors.get(rule.id)}
+                    canInsert={!atLimit}
+                    inputRef={(element) => {
+                      if (element) inputs.current.set(rule.id, element);
+                      else inputs.current.delete(rule.id);
+                    }}
+                    onRulesChange={onRulesChange}
+                    onInsertAfter={() => insertAfter(rule.id)}
+                    onRemove={() => remove(rule.id)}
+                  />
+                ))
+              )}
+            </section>
+          </div>
         </div>
       </PopoverPopup>
     </Popover>
@@ -535,6 +707,8 @@ const chipButtonClass =
   "min-w-0 cursor-pointer truncate px-1.5 py-0.5 hover:bg-sidebar-row-hover hover:text-sidebar-foreground";
 
 export function SidebarEnhancedFilterChips({
+  statuses,
+  onStatusToggle,
   rules,
   compiled,
   onRulesChange,
@@ -547,6 +721,8 @@ export function SidebarEnhancedFilterChips({
   hiddenCount,
   onOpenFilter,
 }: {
+  statuses: ReadonlyArray<SidebarStatusFilter>;
+  onStatusToggle: (status: SidebarStatusFilter) => void;
   rules: ReadonlyArray<SidebarTitleRule>;
   compiled: CompiledSidebarTitleRules;
   onRulesChange: (update: RulesUpdate) => void;
@@ -560,7 +736,8 @@ export function SidebarEnhancedFilterChips({
   hiddenCount: number;
   onOpenFilter: () => void;
 }) {
-  if (!hasSidebarEnhancedFilterContent(rules, selectedAccountKey, projects.length)) return null;
+  if (!hasSidebarEnhancedFilterContent(rules, selectedAccountKey, projects.length, statuses.length))
+    return null;
   const accountLabel =
     selectedAccountKey === null
       ? null
@@ -569,13 +746,36 @@ export function SidebarEnhancedFilterChips({
   const ruleChips = rules
     .map((rule, index) => ({ rule, number: index + 1 }))
     .filter(({ rule }) => rule.pattern.trim() !== "");
-  const chipSlots = MAX_CHIPS - (accountLabel === null ? 0 : 1);
+  const chipSlots = Math.max(0, MAX_CHIPS - statuses.length - (accountLabel === null ? 0 : 1));
   const shownProjects = projects.slice(0, chipSlots);
   const shownRules = ruleChips.slice(0, chipSlots - shownProjects.length);
   const moreCount = projects.length + ruleChips.length - shownProjects.length - shownRules.length;
 
   return (
     <div className="flex flex-wrap items-center gap-1 px-2 pb-1.5" aria-label="Active filters">
+      {statuses.map((status) => {
+        const option = sidebarStatusOption(status);
+        return (
+          <span key={status} className={chipClass}>
+            <button
+              type="button"
+              className={cn(chipButtonClass, "flex items-center gap-1")}
+              onClick={onOpenFilter}
+            >
+              <span aria-hidden className={cn("size-1.5 rounded-full", option.dotClass)} />
+              {option.label}
+            </button>
+            <button
+              type="button"
+              aria-label={`Remove status filter ${option.label}`}
+              className="cursor-pointer px-1 py-0.5 hover:text-sidebar-foreground"
+              onClick={() => onStatusToggle(status)}
+            >
+              <XIcon className="size-3" />
+            </button>
+          </span>
+        );
+      })}
       {shownProjects.map((project) => (
         <span key={project.key} className={chipClass}>
           <Tooltip>

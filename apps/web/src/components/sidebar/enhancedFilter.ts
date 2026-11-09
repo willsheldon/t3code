@@ -1,17 +1,23 @@
 /**
- * Enhanced sidebar filter: title rules (plain text or regular expressions) plus
- * an account, stored per device. Matching results are cached per title, and a
+ * Enhanced sidebar filter: thread status, title rules (plain text or regular
+ * expressions) and an account, stored per device. Matching results are cached per title, and a
  * marker written around uncached regex matching lets the next start turn off a
  * pattern that hung the renderer, so a bad regex can never lock the sidebar.
  */
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import { SIDEBAR_UNAVAILABLE_ACCOUNT_LABEL, sidebarThreadAccountKey } from "../Sidebar.logic";
+import { isLatestRunSettled } from "../../session-logic";
+import {
+  SIDEBAR_UNAVAILABLE_ACCOUNT_LABEL,
+  resolveThreadStatusPill,
+  sidebarThreadAccountKey,
+} from "../Sidebar.logic";
 
 export const SIDEBAR_ENHANCED_FILTER_KEY = "t3code:sidebar:enhanced-filter";
 export const SIDEBAR_ENHANCED_FILTER_PASS_KEY = "t3code:sidebar:enhanced-filter:pass";
 export const LEGACY_SIDEBAR_TITLE_FILTER_KEY = "t3code:sidebar:title-filter";
+export const SIDEBAR_STATUS_FILTER_KEY = "t3code:sidebar:enhanced-filter:statuses";
 export const SIDEBAR_TITLE_RULE_LIMIT = 20;
 const SIDEBAR_FILTER_GUARD_MIN_AGE_MS = 2_000;
 export const SIDEBAR_FILTER_GUARD_MESSAGE =
@@ -230,23 +236,134 @@ export function warmSidebarTitleRuleCache(
   }
 }
 
-export function matchesSidebarThreadFilters(
-  thread: {
+const SIDEBAR_STATUS_FILTERS = ["input", "working", "failed", "done"] as const;
+export type SidebarStatusFilter = (typeof SIDEBAR_STATUS_FILTERS)[number];
+export const SidebarStatusFiltersSchema = Schema.Array(Schema.Literals(SIDEBAR_STATUS_FILTERS));
+export const NO_SIDEBAR_STATUS_FILTERS: ReadonlyArray<SidebarStatusFilter> = [];
+export type SidebarStatusCounts = Readonly<Record<SidebarStatusFilter, number>>;
+
+export const SIDEBAR_STATUS_OPTIONS: ReadonlyArray<{
+  readonly value: SidebarStatusFilter;
+  readonly label: string;
+  readonly description: string;
+  readonly dotClass: string;
+}> = [
+  {
+    value: "input",
+    label: "Input",
+    description: "Waiting on you: input, an approval, a guest or a plan",
+    dotClass: "bg-indigo-500 dark:bg-indigo-300/90",
+  },
+  {
+    value: "working",
+    label: "Working",
+    description: "Running, connecting or waiting on other work",
+    dotClass: "bg-sky-500 dark:bg-sky-300/80",
+  },
+  {
+    value: "failed",
+    label: "Failed",
+    description: "Failed runs you have not opened yet",
+    dotClass: "bg-red-500 dark:bg-red-300/90",
+  },
+  {
+    value: "done",
+    label: "Done",
+    description: "Last run finished and nothing is pending",
+    dotClass: "bg-emerald-500 dark:bg-emerald-300/90",
+  },
+];
+
+export const sidebarStatusOption = (status: SidebarStatusFilter) =>
+  SIDEBAR_STATUS_OPTIONS.find((option) => option.value === status) ?? SIDEBAR_STATUS_OPTIONS[0]!;
+
+/** Toggles one status and keeps the stored order canonical, so reset keys stay stable. */
+export function toggleSidebarStatusFilter(
+  selected: ReadonlyArray<SidebarStatusFilter>,
+  status: SidebarStatusFilter,
+): ReadonlyArray<SidebarStatusFilter> {
+  return SIDEBAR_STATUS_FILTERS.filter((candidate) =>
+    candidate === status ? !selected.includes(candidate) : selected.includes(candidate),
+  );
+}
+
+/**
+ * The filter a thread belongs to, from the same status its sidebar row shows.
+ * Done is wider than the Completed label, which clears once the thread is
+ * opened. A failed run the user has already opened belongs to no filter.
+ */
+export function sidebarThreadStatusFilter(
+  thread: Parameters<typeof resolveThreadStatusPill>[0]["thread"],
+): SidebarStatusFilter | null {
+  switch (resolveThreadStatusPill({ thread })?.label) {
+    case "Pending Approval":
+    case "Awaiting Input":
+    case "Guest Request":
+    case "Plan Ready":
+      return "input";
+    case "Working":
+    case "Connecting":
+    case "Waiting":
+      return "working";
+    case "Failed":
+      return "failed";
+    case "Completed":
+      return "done";
+    case undefined:
+      return thread.latestRun?.status !== "failed" &&
+        isLatestRunSettled(thread.latestRun, thread.runtime)
+        ? "done"
+        : null;
+  }
+}
+
+export function countSidebarThreadStatuses<T>(
+  threads: ReadonlyArray<T>,
+  statusOf: (thread: T) => SidebarStatusFilter | null,
+): SidebarStatusCounts {
+  const counts = { input: 0, working: 0, failed: 0, done: 0 };
+  for (const thread of threads) {
+    const status = statusOf(thread);
+    if (status !== null) counts[status] += 1;
+  }
+  return counts;
+}
+
+/** Whether any filter can currently hide a thread. */
+export const hasLiveSidebarThreadFilters = (input: {
+  readonly compiled: CompiledSidebarTitleRules;
+  readonly accountKey: string | null;
+  readonly statuses: ReadonlyArray<SidebarStatusFilter>;
+}): boolean =>
+  input.compiled.liveCount > 0 || input.accountKey !== null || input.statuses.length > 0;
+
+export function matchesSidebarThreadFilters<
+  T extends {
     readonly title: string;
     readonly environmentId: string;
     readonly providerInstanceId: string;
   },
+>(
+  thread: T,
   filters: {
     readonly compiled: CompiledSidebarTitleRules;
     readonly accountKey: string | null;
     readonly isOpen: boolean;
+    /** Left out to match on everything but status, as the status counts do. */
+    readonly status?: {
+      readonly selected: ReadonlyArray<SidebarStatusFilter>;
+      readonly of: (thread: T) => SidebarStatusFilter | null;
+    };
   },
 ): boolean {
-  return (
-    filters.isOpen ||
-    (matchesSidebarTitleRules(filters.compiled, thread.title) &&
-      (filters.accountKey === null || sidebarThreadAccountKey(thread) === filters.accountKey))
-  );
+  if (filters.isOpen) return true;
+  if (!matchesSidebarTitleRules(filters.compiled, thread.title)) return false;
+  if (filters.accountKey !== null && sidebarThreadAccountKey(thread) !== filters.accountKey) {
+    return false;
+  }
+  if (filters.status === undefined || filters.status.selected.length === 0) return true;
+  const status = filters.status.of(thread);
+  return status !== null && filters.status.selected.includes(status);
 }
 
 /** The single-field filter from earlier builds, as one rule. */
@@ -404,8 +521,12 @@ export function sidebarEnhancedFilterButtonLabel(input: {
   readonly accountKey: string | null;
   readonly accountOptions: ReadonlyArray<{ readonly key: string; readonly label: string }>;
   readonly projectNames: ReadonlyArray<string>;
+  readonly statuses?: ReadonlyArray<SidebarStatusFilter>;
 }): string {
-  const parts = [...input.projectNames];
+  const parts = [
+    ...(input.statuses ?? []).map((status) => sidebarStatusOption(status).label),
+    ...input.projectNames,
+  ];
   for (const rule of input.rules.filter(isSidebarTitleRuleLive)) {
     const pattern = rule.pattern.trim();
     parts.push(`${rule.mode} ${rule.regex ? `/${pattern}/` : `"${pattern}"`}`);
@@ -423,15 +544,20 @@ export const sidebarEnhancedFilterBadgeCount = (
   compiled: CompiledSidebarTitleRules,
   accountKey: string | null,
   projectCount: number,
-): number => compiled.liveCount + (accountKey === null ? 0 : 1) + projectCount;
+  statusCount = 0,
+): number => compiled.liveCount + (accountKey === null ? 0 : 1) + projectCount + statusCount;
 
 /** Whether the chip row has anything to show, including rules that are off or invalid. */
 export const hasSidebarEnhancedFilterContent = (
   rules: Rules,
   accountKey: string | null,
   projectCount: number,
+  statusCount = 0,
 ): boolean =>
-  projectCount > 0 || accountKey !== null || rules.some((rule) => rule.pattern.trim() !== "");
+  statusCount > 0 ||
+  projectCount > 0 ||
+  accountKey !== null ||
+  rules.some((rule) => rule.pattern.trim() !== "");
 
 /** Narrows the filter's project list by name. */
 export function filterSidebarProjectOptions<T extends { readonly label: string }>(
