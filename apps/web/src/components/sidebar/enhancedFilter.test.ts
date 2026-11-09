@@ -12,6 +12,10 @@ import {
   type SidebarFilterStore,
   type SidebarTitleRule,
   compileSidebarTitleRules,
+  countSidebarThreadStatuses,
+  hasLiveSidebarThreadFilters,
+  sidebarThreadStatusFilter,
+  toggleSidebarStatusFilter,
   sidebarSettledFilterCounts,
   sidebarSettledPageThreads,
   filterSidebarProjectOptions,
@@ -521,5 +525,142 @@ describe("enhanced filter projects", () => {
     expect(filterSidebarProjectOptions(options, "  beta ")).toEqual([options[1]]);
     expect(filterSidebarProjectOptions(options, "")).toEqual(options);
     expect(filterSidebarProjectOptions(options, "missing")).toEqual([]);
+  });
+});
+
+describe("sidebar status filter", () => {
+  type StatusThread = Parameters<typeof sidebarThreadStatusFilter>[0];
+  const run = (status: string, completedAt: string | null = "2026-01-02T00:00:00.000Z") =>
+    ({ runId: "run-1", status, startedAt: "2026-01-01T00:00:00.000Z", completedAt }) as never;
+  const thread = (overrides: Partial<StatusThread>): StatusThread =>
+    ({
+      hasActionableProposedPlan: false,
+      hasPendingApprovals: false,
+      hasPendingUserInput: false,
+      pendingSubagentRequest: null,
+      pendingGuestMessageCount: 0,
+      interactionMode: "default",
+      latestRun: null,
+      runtime: null,
+      lastVisitedAt: "2026-01-03T00:00:00.000Z",
+      ...overrides,
+    }) as StatusThread;
+
+  it("puts everything waiting on the user under input", () => {
+    expect(sidebarThreadStatusFilter(thread({ hasPendingApprovals: true }))).toBe("input");
+    expect(sidebarThreadStatusFilter(thread({ hasPendingUserInput: true }))).toBe("input");
+    expect(sidebarThreadStatusFilter(thread({ pendingGuestMessageCount: 1 }))).toBe("input");
+    expect(
+      sidebarThreadStatusFilter(
+        thread({
+          interactionMode: "plan",
+          hasActionableProposedPlan: true,
+          latestRun: run("completed"),
+        }),
+      ),
+    ).toBe("input");
+  });
+
+  it("puts active runs under working, ahead of the finished run they replace", () => {
+    for (const status of ["running", "waiting", "preparing", "starting", "queued"]) {
+      expect(
+        sidebarThreadStatusFilter(
+          thread({ latestRun: run("completed"), runtime: { status, activeRunId: null } as never }),
+        ),
+      ).toBe("working");
+    }
+  });
+
+  it("keeps done after the thread is read, and also while it is unread", () => {
+    expect(sidebarThreadStatusFilter(thread({ latestRun: run("completed") }))).toBe("done");
+    expect(
+      sidebarThreadStatusFilter(
+        thread({ latestRun: run("completed"), lastVisitedAt: "2026-01-01T12:00:00.000Z" }),
+      ),
+    ).toBe("done");
+  });
+
+  it("lists a failed run as failed until it is read, and never as done", () => {
+    expect(
+      sidebarThreadStatusFilter(
+        thread({ latestRun: run("failed"), lastVisitedAt: "2026-01-01T12:00:00.000Z" }),
+      ),
+    ).toBe("failed");
+    expect(sidebarThreadStatusFilter(thread({ latestRun: run("failed") }))).toBeNull();
+  });
+
+  it("gives a thread with no run no status", () => {
+    expect(sidebarThreadStatusFilter(thread({}))).toBeNull();
+  });
+
+  it("toggles without depending on click order", () => {
+    expect(toggleSidebarStatusFilter(["done"], "input")).toEqual(["input", "done"]);
+    expect(toggleSidebarStatusFilter(["input", "done"], "done")).toEqual(["input"]);
+  });
+
+  it("counts every thread once and skips those with no status", () => {
+    const statuses = ["input", "done", "done", null] as const;
+    expect(countSidebarThreadStatuses(statuses, (status) => status)).toEqual({
+      input: 1,
+      working: 0,
+      failed: 0,
+      done: 2,
+    });
+  });
+
+  const compiled = compileSidebarTitleRules([]);
+  const shell = { title: "A", environmentId: "env", providerInstanceId: "codex" };
+
+  it("matches any selected status, and only when one is selected", () => {
+    const filters = { compiled, accountKey: null, isOpen: false };
+    const of = () => "done" as const;
+    expect(matchesSidebarThreadFilters(shell, filters)).toBe(true);
+    expect(matchesSidebarThreadFilters(shell, { ...filters, status: { selected: [], of } })).toBe(
+      true,
+    );
+    expect(
+      matchesSidebarThreadFilters(shell, {
+        ...filters,
+        status: { selected: ["input", "done"], of },
+      }),
+    ).toBe(true);
+    expect(
+      matchesSidebarThreadFilters(shell, { ...filters, status: { selected: ["input"], of } }),
+    ).toBe(false);
+    expect(
+      matchesSidebarThreadFilters(shell, {
+        ...filters,
+        status: { selected: ["done"], of: () => null },
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps the open thread visible when its status is not selected", () => {
+    expect(
+      matchesSidebarThreadFilters(shell, {
+        compiled,
+        accountKey: null,
+        isOpen: true,
+        status: { selected: ["input"], of: () => "done" },
+      }),
+    ).toBe(true);
+  });
+
+  it("counts a selected status as an active filter", () => {
+    expect(hasLiveSidebarThreadFilters({ compiled, accountKey: null, statuses: [] })).toBe(false);
+    expect(hasLiveSidebarThreadFilters({ compiled, accountKey: null, statuses: ["done"] })).toBe(
+      true,
+    );
+    expect(sidebarEnhancedFilterBadgeCount(compiled, null, 0, 2)).toBe(2);
+    expect(hasSidebarEnhancedFilterContent([], null, 0, 1)).toBe(true);
+    expect(
+      sidebarEnhancedFilterButtonLabel({
+        rules: [],
+        accountKey: null,
+        accountOptions: [],
+        projectNames: [],
+        statuses: ["input"],
+      }),
+    ).toBe("Enhanced filter: Input");
   });
 });

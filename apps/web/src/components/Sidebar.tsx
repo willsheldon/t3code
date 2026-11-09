@@ -210,6 +210,7 @@ import {
   type SidebarListItem,
   type SidebarSection,
   resolveSidebarRowThreadId,
+  resolveThreadLastVisitedAt,
 } from "./Sidebar.logic";
 import {
   SIDEBAR_ENHANCED_FILTER_KEY,
@@ -217,7 +218,15 @@ import {
   type SidebarTitleRule,
   compileSidebarTitleRules,
   initializeSidebarEnhancedFilter,
+  NO_SIDEBAR_STATUS_FILTERS,
+  SIDEBAR_STATUS_FILTER_KEY,
+  type SidebarStatusFilter,
+  SidebarStatusFiltersSchema,
+  countSidebarThreadStatuses,
+  hasLiveSidebarThreadFilters,
   matchesSidebarThreadFilters,
+  sidebarThreadStatusFilter,
+  toggleSidebarStatusFilter,
   warmSidebarTitleRuleCache,
   sidebarSettledFilterCounts,
   sidebarSettledPageThreads,
@@ -391,6 +400,9 @@ interface SidebarThreadPartitionInput {
   readonly compiledTitleRules: ReturnType<typeof compileSidebarTitleRules>;
   readonly enhancedFilterEnabled: boolean;
   readonly selectedAccountKey: string | null;
+  readonly selectedStatuses: ReadonlyArray<SidebarStatusFilter>;
+  readonly statusCountsWanted: boolean;
+  readonly localLastVisitedAtById: Readonly<Record<string, string>>;
   readonly filterExemptThreadKey: string | null;
 }
 
@@ -403,6 +415,7 @@ function threadShellKey(thread: Pick<SidebarThreadSummary, "environmentId" | "id
 }
 
 const NO_DRAGGED_ORDER: readonly string[] = [];
+const NO_LOCAL_VISITS: Readonly<Record<string, string>> = {};
 const NO_DRAGGED_ORDERS: {
   readonly settledOrder: readonly string[];
   readonly activeOrder: readonly string[] | undefined;
@@ -461,6 +474,8 @@ function useSidebarThreads(input: {
   readonly compiledTitleRules: ReturnType<typeof compileSidebarTitleRules>;
   readonly enhancedFilterEnabled: boolean;
   readonly selectedAccountKey: string | null;
+  readonly selectedStatuses: ReadonlyArray<SidebarStatusFilter>;
+  readonly statusCountsWanted: boolean;
 }) {
   const {
     projectScopeKey,
@@ -477,7 +492,14 @@ function useSidebarThreads(input: {
     compiledTitleRules,
     enhancedFilterEnabled,
     selectedAccountKey,
+    selectedStatuses,
+    statusCountsWanted,
   } = input;
+  // Read only while status is in use, so visiting a thread does not repartition otherwise.
+  const statusInUse = enhancedFilterEnabled && (selectedStatuses.length > 0 || statusCountsWanted);
+  const localLastVisitedAtById = useUiStateStore((store) =>
+    statusInUse ? store.threadLastVisitedAtById : NO_LOCAL_VISITS,
+  );
   // Folders already separate the work, so boring mode has no Working shelf.
   const workingShelfEnabled =
     useClientSettings((s) => s.sidebarWorkingShelfEnabled) && folderGroups === null;
@@ -507,13 +529,19 @@ function useSidebarThreads(input: {
   const projectExpandedById = useUiStateStore((store) => store.projectExpandedById);
   const setProjectExpanded = useUiStateStore((store) => store.setProjectExpanded);
   const threadFiltersActive =
-    enhancedFilterEnabled && (compiledTitleRules.liveCount > 0 || selectedAccountKey !== null);
+    enhancedFilterEnabled &&
+    hasLiveSidebarThreadFilters({
+      compiled: compiledTitleRules,
+      accountKey: selectedAccountKey,
+      statuses: selectedStatuses,
+    });
   // Use stored rules directly so the compiler can cache paging independently of compiled matchers.
   const settledResetKey = JSON.stringify([
     projectScopeKey,
     enhancedFilterEnabled,
     titleRules,
     selectedAccountKey,
+    selectedStatuses,
   ]);
   const [settledTail, setSettledTail] = useState({
     scopeKey: settledResetKey,
@@ -538,6 +566,9 @@ function useSidebarThreads(input: {
     compiledTitleRules,
     enhancedFilterEnabled,
     selectedAccountKey,
+    selectedStatuses,
+    statusCountsWanted,
+    localLastVisitedAtById,
     filterExemptThreadKey: threadFiltersActive ? routeRowThreadKey : null,
   });
 
@@ -637,6 +668,7 @@ function useSidebarThreads(input: {
     settledVisibleCount,
     settledCount: settledCounts.count,
     hasUnloadedSettledThreads: settledCounts.hasUnloaded,
+    doneHasMore: olderSettledShelf.unloadedCount(partition.inScopeThreads) > 0,
     olderSettledShelf,
     hiddenSettledCount: settledCounts.hidden,
     showMoreSettled: () =>
@@ -690,7 +722,11 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
   const inScope = filterSidebarV2VisibleThreads(threads, scopedProjectKeys, delegatedUnderParent);
   const threadFiltersActive =
     input.enhancedFilterEnabled &&
-    (input.compiledTitleRules.liveCount > 0 || input.selectedAccountKey !== null);
+    hasLiveSidebarThreadFilters({
+      compiled: input.compiledTitleRules,
+      accountKey: input.selectedAccountKey,
+      statuses: input.selectedStatuses,
+    });
   if (threadFiltersActive) {
     warmSidebarTitleRuleCache(
       input.compiledTitleRules,
@@ -698,15 +734,38 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
       browserFilterStore(),
     );
   }
+  const statusOf = (thread: EnvironmentThreadShell) =>
+    sidebarThreadStatusFilter({
+      ...thread,
+      lastVisitedAt: resolveThreadLastVisitedAt(
+        thread.lastVisitedAt,
+        input.localLastVisitedAtById[threadShellKey(thread)],
+      ),
+    });
   const visible = threadFiltersActive
     ? inScope.filter((thread) =>
         matchesSidebarThreadFilters(thread, {
           compiled: input.compiledTitleRules,
           accountKey: input.selectedAccountKey,
           isOpen: threadShellKey(thread) === input.filterExemptThreadKey,
+          status: { selected: input.selectedStatuses, of: statusOf },
         }),
       )
     : inScope;
+  // Each count ignores the status selection, so a count says what selecting that status would show.
+  const statusCounts =
+    input.enhancedFilterEnabled && input.statusCountsWanted
+      ? countSidebarThreadStatuses(
+          inScope.filter((thread) =>
+            matchesSidebarThreadFilters(thread, {
+              compiled: input.compiledTitleRules,
+              accountKey: input.selectedAccountKey,
+              isOpen: false,
+            }),
+          ),
+          statusOf,
+        )
+      : null;
   const visibleKeys = threadFiltersActive ? new Set(visible.map(threadShellKey)) : null;
   const filterVisible = (list: readonly EnvironmentThreadShell[]) =>
     visibleKeys === null ? list : list.filter((thread) => visibleKeys.has(threadShellKey(thread)));
@@ -798,6 +857,7 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
     scannedSettledThreads: settled,
     inScopeThreads: inScope,
     enhancedHiddenCount: inScope.length - visible.length,
+    statusCounts,
     snoozeNow: preciseNow,
   };
 }
@@ -1239,10 +1299,17 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     null as string | null,
     SIDEBAR_ACCOUNT_FILTER_SCHEMA,
   );
+  const [selectedStatuses, setSelectedStatuses] = useLocalStorage(
+    SIDEBAR_STATUS_FILTER_KEY,
+    NO_SIDEBAR_STATUS_FILTERS,
+    SidebarStatusFiltersSchema,
+  );
+  const toggleSelectedStatus = (status: SidebarStatusFilter) =>
+    setSelectedStatuses((current) => toggleSidebarStatusFilter(current, status));
   // Off means no enhanced filtering at all, account included, so nothing hidden
   // is left applying. The stored rules and account come back when it is on.
   const enhancedFilterKey = enhancedFilterEnabled
-    ? JSON.stringify([compiledTitleRules.liveKey, selectedAccountKey])
+    ? JSON.stringify([compiledTitleRules.liveKey, selectedAccountKey, selectedStatuses])
     : "";
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Persisted filters can change outside a sidebar event handler, and the selection store must follow them.
   useEffect(() => {
@@ -1453,6 +1520,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     settledThreads,
     snoozeNow,
     enhancedHiddenCount,
+    statusCounts,
+    doneHasMore,
     searchableThreads,
     settledVisibleCount,
     settledCount,
@@ -1501,6 +1570,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     compiledTitleRules,
     enhancedFilterEnabled,
     selectedAccountKey,
+    selectedStatuses,
+    statusCountsWanted: enhancedFilterOpen,
   });
 
   // Ranked across environments as the palette ranks them, so one
@@ -3127,6 +3198,12 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               enhancedFilter={
                 enhancedFilterEnabled ? (
                   <SidebarEnhancedFilterButton
+                    statuses={selectedStatuses}
+                    statusCounts={statusCounts}
+                    doneHasMore={doneHasMore}
+                    onStatusToggle={toggleSelectedStatus}
+                    onStatusesClear={() => setSelectedStatuses(NO_SIDEBAR_STATUS_FILTERS)}
+                    hiddenCount={enhancedHiddenCount}
                     rules={titleRules}
                     compiled={compiledTitleRules}
                     onRulesChange={setTitleRules}
@@ -3437,6 +3514,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             />
             {enhancedFilterEnabled ? (
               <SidebarEnhancedFilterChips
+                statuses={selectedStatuses}
+                onStatusToggle={toggleSelectedStatus}
                 rules={titleRules}
                 compiled={compiledTitleRules}
                 onRulesChange={setTitleRules}
@@ -3903,7 +3982,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                   </button>
                 </>
               ) : enhancedFilterEnabled &&
-                (compiledTitleRules.liveCount > 0 || selectedAccountKey !== null) ? (
+                hasLiveSidebarThreadFilters({
+                  compiled: compiledTitleRules,
+                  accountKey: selectedAccountKey,
+                  statuses: selectedStatuses,
+                }) ? (
                 "No threads match filters"
               ) : scopedProjectGroups.length > 1 ? (
                 "No threads in these projects yet"

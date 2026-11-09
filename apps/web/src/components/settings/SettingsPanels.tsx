@@ -898,7 +898,7 @@ export function GeneralSettingsPanel() {
         />
         <SettingsRow
           {...searchableSetting("enhanced-thread-filter")}
-          description="Add a filter button beside search that selects several projects and hides or shows threads by title rules, including regular expressions, and by account. It replaces the project filter button."
+          description="Add a filter button beside search that filters threads by status, selects several projects, and hides or shows threads by title rules, including regular expressions, and by account. It replaces the project filter button."
           resetAction={
             settings.sidebarEnhancedFilterEnabled !==
             DEFAULT_UNIFIED_SETTINGS.sidebarEnhancedFilterEnabled ? (

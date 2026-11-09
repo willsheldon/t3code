@@ -223,9 +223,15 @@ The linked pull request participates in automatic settlement.
 ## Filter the thread list
 
 On web and desktop, the enhanced filter button (the sliders icon beside the
-sidebar search) narrows the list by project, thread title and account. It
+sidebar search) narrows the list by status, project, thread title and account. It
 replaces the separate project filter button while it is on.
 
+- **Status.** Select any number of **Input** (waiting on you), **Working**,
+  **Failed** and **Done**. A thread shows when it is in any selected status. Each
+  button shows how many threads it would match. **Failed** lists failed runs you
+  have not opened. **Done** lists threads whose last run finished with nothing
+  pending, whether or not you have read them. A **+** on its count means older
+  settled threads are not loaded yet.
 - **Projects.** Check any number of projects to show only their threads. Each
   row also has the project's pin and settings controls. Right-click a row to
   open its project settings.
@@ -240,10 +246,10 @@ replaces the separate project filter button while it is on.
 Press Enter in a rule to add another below it. Press Backspace in an empty rule
 to remove it. Each rule has a switch, so you can turn it off without deleting it.
 
-While a filter is set, chips under the search field show each project, rule and
-the account. Click a rule's chip to turn it off or on, or click any chip's x to
-remove it. The end of the row shows how many threads are hidden. **Clear all** in
-the filter removes every project, rule and the account filter.
+While a filter is set, chips under the search field show each status, project,
+rule and the account. Click a rule's chip to turn it off or on, or click any chip's x to
+remove it. The end of the row shows how many threads are hidden. **Clear all** at the
+top of the filter removes every status, project, rule and the account filter.
 
 Search and the section counts follow the filters. Expand Settled to load older
 matching threads; its count updates as they load. The thread you have open stays
