@@ -1,7 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
-import { ProjectFilterSection, StatusFilterSection } from "./SidebarEnhancedFilter";
+import { compileSidebarTitleRules, newSidebarTitleRule } from "./enhancedFilter";
+import {
+  ProjectFilterSection,
+  SidebarEnhancedFilterChips,
+  StatusFilterSection,
+} from "./SidebarEnhancedFilter";
 
 const renderSection = (optionCount: number, selectedKeys: ReadonlyArray<string>) =>
   renderToStaticMarkup(
@@ -56,5 +61,36 @@ describe("StatusFilterSection", () => {
   it("marks the Done count as a lower bound while settled history is unloaded", () => {
     expect(render(false)).not.toContain("40+");
     expect(render(true)).toContain("40+");
+  });
+});
+
+describe("SidebarEnhancedFilterChips", () => {
+  const rules = ["a", "b", "c", "d", "e"].map((pattern) => ({
+    ...newSidebarTitleRule(pattern),
+    pattern,
+  }));
+
+  it("gives statuses their slots and counts what no longer fits", () => {
+    const html = renderToStaticMarkup(
+      <SidebarEnhancedFilterChips
+        statuses={["input", "done"]}
+        onStatusToggle={() => {}}
+        rules={rules}
+        compiled={compileSidebarTitleRules(rules)}
+        onRulesChange={() => {}}
+        accountOptions={[]}
+        selectedAccountKey={null}
+        onAccountChange={() => {}}
+        projects={[]}
+        onProjectToggle={() => {}}
+        renderProjectIcon={() => null}
+        hiddenCount={0}
+        onOpenFilter={() => {}}
+      />,
+    );
+    expect(html).toContain("Remove status filter Input");
+    expect(html).toContain("Remove status filter Done");
+    expect(html.match(/aria-label="Remove rule/g)).toHaveLength(4);
+    expect(html).toContain("+1 more");
   });
 });

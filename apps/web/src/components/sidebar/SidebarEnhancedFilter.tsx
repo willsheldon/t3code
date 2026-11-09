@@ -484,6 +484,11 @@ export function SidebarEnhancedFilterButton({
   const inputs = useRef(new Map<string, HTMLInputElement>());
   const addButtonRef = useRef<HTMLButtonElement>(null);
   const firstStatusRef = useRef<HTMLButtonElement | null>(null);
+  // Counts go null the moment the popover closes; keep the last ones through its fade.
+  const [shownStatusCounts, setShownStatusCounts] = useState(statusCounts);
+  if (statusCounts !== null && statusCounts !== shownStatusCounts) {
+    setShownStatusCounts(statusCounts);
+  }
   // A rule id, "add" for the add button, or null. A ref, not state: the rule
   // change that goes with it already re-renders, and focus follows that commit.
   const pendingFocusRef = useRef<string | null>(null);
@@ -593,7 +598,7 @@ export function SidebarEnhancedFilterButton({
           <div className="flex min-h-0 flex-col divide-y divide-border/60 overflow-y-auto">
             <StatusFilterSection
               selected={statuses}
-              counts={statusCounts}
+              counts={shownStatusCounts}
               doneHasMore={doneHasMore}
               onToggle={onStatusToggle}
               onClear={onStatusesClear}

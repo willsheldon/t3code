@@ -230,13 +230,14 @@ replaces the separate project filter button while it is on.
 - **Projects.** Check any number of projects to show only their threads. Each
   row also has the project's pin and settings controls. Right-click a row to
   open its project settings.
+- **Account** keeps only the threads that run on one account. The same account
+  on two machines is listed separately, with the machine named beside it. It
+  appears only when you have more than one account.
 - **Title rules.** Add up to 20 rules. Each rule either hides threads whose
   title matches, or only shows threads that match. Turn on **.\*** to use a
   regular expression instead of plain text. Matching ignores letter case. A
   thread shows when it matches no Hide rule and, if you have any Only rules, at
   least one of them.
-- **Account** keeps only the threads that run on one account. The same account
-  on two machines is listed separately, with the machine named beside it.
 
 Press Enter in a rule to add another below it. Press Backspace in an empty rule
 to remove it. Each rule has a switch, so you can turn it off without deleting it.
