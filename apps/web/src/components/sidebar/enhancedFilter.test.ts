@@ -571,6 +571,17 @@ describe("sidebar status filter", () => {
     }
   });
 
+  it("puts a run blocked on another thread under working", () => {
+    expect(
+      sidebarThreadStatusFilter(
+        thread({
+          blockedOnThreadWait: true,
+          runtime: { status: "running", activeRunId: "run-1" } as never,
+        }),
+      ),
+    ).toBe("working");
+  });
+
   it("keeps done after the thread is read, and also while it is unread", () => {
     expect(sidebarThreadStatusFilter(thread({ latestRun: run("completed") }))).toBe("done");
     expect(

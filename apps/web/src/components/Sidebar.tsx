@@ -600,10 +600,11 @@ function useSidebarThreads(input: {
     }
     return visible.length === settledThreads.length ? settledThreads : visible;
   })();
+  const unloadedSettledCount = olderSettledShelf.unloadedCount(partition.inScopeThreads);
   const settledCounts = sidebarSettledFilterCounts({
     matched: settledThreads.length,
     visible: visibleSettledThreads.length,
-    unloaded: olderSettledShelf.unloadedCount(partition.inScopeThreads),
+    unloaded: unloadedSettledCount,
     filtering: threadFiltersActive,
   });
   const renderedSettledThreads = settledShelfExpanded
@@ -668,7 +669,7 @@ function useSidebarThreads(input: {
     settledVisibleCount,
     settledCount: settledCounts.count,
     hasUnloadedSettledThreads: settledCounts.hasUnloaded,
-    doneHasMore: olderSettledShelf.unloadedCount(partition.inScopeThreads) > 0,
+    doneHasMore: unloadedSettledCount > 0,
     olderSettledShelf,
     hiddenSettledCount: settledCounts.hidden,
     showMoreSettled: () =>
@@ -3966,8 +3967,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             workingThreads.length +
             snoozedThreads.length +
             settledCount ===
-            0 &&
-          !hasUnloadedSettledThreads ? (
+            0 ? (
             <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">
               {projects.length === 0 ? (
                 <>
