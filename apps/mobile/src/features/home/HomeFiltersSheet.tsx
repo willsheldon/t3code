@@ -15,7 +15,7 @@ import {
   applyHomeListFilterAction,
   buildHomeListFilterSheet,
   filterHomeListProjectEntries,
-  HOME_LIST_PROJECT_SEARCH_THRESHOLD,
+  homeListProjectSearchEnabled,
   isHomeListFilterCustomized,
   type HomeListFilterMenuEntry,
   type HomeListFilterSheetStatus,
@@ -96,8 +96,7 @@ function ProjectsSection(props: {
 }) {
   const [query, setQuery] = useState("");
   const searchRef = useRef<TextInputInstance | null>(null);
-  // One entry is "All projects"; the rest are the projects themselves.
-  const searchable = props.entries.length - 1 > HOME_LIST_PROJECT_SEARCH_THRESHOLD;
+  const searchable = homeListProjectSearchEnabled(props.entries);
   const shown = searchable ? filterHomeListProjectEntries(props.entries, query) : props.entries;
   return (
     <View className="gap-2">
@@ -157,6 +156,8 @@ export function HomeFiltersSheet() {
       </Toolbar>
       <ScrollView
         alwaysBounceVertical
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         className="flex-1 bg-screen"
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}

@@ -7,6 +7,7 @@ import {
   buildHomeListFilterSheet,
   buildHomeListFilterSections,
   filterHomeListProjectEntries,
+  homeListProjectSearchEnabled,
   homeListFilterActiveCount,
   homeListFilterButtonLabel,
   homeListFilterChipAccessibilityLabels,
@@ -564,5 +565,21 @@ describe("filterHomeListProjectEntries", () => {
   it("matches project names without case and drops All projects", () => {
     expect(filterHomeListProjectEntries(entries, " beta ")).toEqual([entries[2]]);
     expect(filterHomeListProjectEntries(entries, "all")).toEqual([]);
+  });
+});
+
+describe("homeListProjectSearchEnabled", () => {
+  const projects = (count: number) => [
+    { id: "project:all", title: "All projects", state: "on" as const },
+    ...Array.from({ length: count }, (_, index) => ({
+      id: `project:${index}`,
+      title: `Project ${index}`,
+      state: "off" as const,
+    })),
+  ];
+
+  it("offers search only past five projects, not counting All projects", () => {
+    expect(homeListProjectSearchEnabled(projects(5))).toBe(false);
+    expect(homeListProjectSearchEnabled(projects(6))).toBe(true);
   });
 });

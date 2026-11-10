@@ -370,8 +370,17 @@ export interface HomeListFilterSheet {
   readonly account: ReadonlyArray<HomeListFilterMenuEntry> | null;
 }
 
-/** The sheet offers a project search once the list is longer than this. */
-export const HOME_LIST_PROJECT_SEARCH_THRESHOLD = 5;
+const HOME_LIST_PROJECT_SEARCH_THRESHOLD = 5;
+
+/** The sheet offers a project search once there are more than five projects ("All projects" aside). */
+export function homeListProjectSearchEnabled(
+  entries: ReadonlyArray<HomeListFilterMenuEntry>,
+): boolean {
+  return (
+    entries.filter((entry) => entry.id !== "project:all").length >
+    HOME_LIST_PROJECT_SEARCH_THRESHOLD
+  );
+}
 
 /**
  * Narrows the sheet's project rows by name. "All projects" only shows with an empty query,
