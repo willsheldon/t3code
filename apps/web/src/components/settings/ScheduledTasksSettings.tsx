@@ -360,6 +360,7 @@ function statusVariant(status: ScheduledTask["lastRunStatus"]) {
   if (status === "failed") return "error";
   if (status === "succeeded") return "success";
   if (status === "running") return "info";
+  if (status === "skipped-pending") return "warning";
   return "outline";
 }
 

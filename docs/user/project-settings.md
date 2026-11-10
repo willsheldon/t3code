@@ -86,6 +86,10 @@ environment's time zone, which may differ from your phone's. Choose **Once**
 to run a task a single time at a date and time in your own time zone. If the
 environment is offline then, the task runs when it is back.
 
+An interval task that posts into a busy thread queues at most one run. If its
+earlier run is still waiting when the next interval arrives, that interval is
+skipped and the task shows **skipped-pending**.
+
 Deleting a thread also deletes tasks that post into that thread. Tasks that start
 a new thread on each run survive deletion of their previous threads.
 
