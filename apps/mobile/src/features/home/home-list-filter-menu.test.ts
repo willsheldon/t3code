@@ -6,6 +6,7 @@ import {
   applyHomeListFilterAction,
   buildHomeListFilterMenu,
   buildHomeListFilterSections,
+  homeListFilterChipAccessibilityLabels,
   homeListFilterMenuActions,
   homeListFilterSubmenuActions,
   isHomeListFilterCustomized,
@@ -55,6 +56,7 @@ function handlers() {
     onProjectsChange: vi.fn(),
     onStatusesChange: vi.fn(),
     onAccountChange: vi.fn(),
+    onReset: vi.fn(),
   };
 }
 
@@ -259,6 +261,118 @@ describe("with the enhanced filter off", () => {
     applyHomeListFilterAction("account:all", off, actions);
     expect(actions.onStatusesChange).not.toHaveBeenCalled();
     expect(actions.onAccountChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("subtitles on the All entries", () => {
+  const allSubtitles = (menu: HomeListFilterMenuState) =>
+    buildHomeListFilterSections(menu)
+      .flatMap((entry) => entry.entries)
+      .filter((entry) => entry.id === "environment:all" || entry.id === "project:all")
+      .map((entry) => entry.subtitle);
+
+  it("are on with the enhanced filter", () => {
+    expect(allSubtitles(state())).toEqual([
+      "Show threads from every environment",
+      "Show threads from every project",
+    ]);
+  });
+
+  it("are left out on a phone while it is off, as before", () => {
+    expect(allSubtitles(state({ enhanced: null }))).toEqual([undefined, undefined]);
+  });
+
+  it("stay on the tablet sidebar while it is off, as before", () => {
+    expect(allSubtitles(state({ enhanced: null, sidebar: true }))).toEqual([
+      "Show threads from every environment",
+      "Show threads from every project",
+    ]);
+  });
+});
+
+describe("reset entry", () => {
+  const customized = state({ selectedEnvironmentId: ENV_A });
+  const reset = (menu: HomeListFilterMenuState) =>
+    homeListFilterSubmenuActions(
+      buildHomeListFilterSections(menu),
+      isHomeListFilterCustomized(menu),
+    ).filter((action) => action.id === "reset");
+
+  it("is in the Android menu only while a filter is set", () => {
+    expect(reset(state())).toEqual([]);
+    expect(reset(customized)).toEqual([{ id: "reset", title: "Reset filters" }]);
+    expect(
+      reset(state({ enhanced: { ...ENHANCED, statuses: ["failed"] } })).map((action) => action.id),
+    ).toEqual(["reset"]);
+    // The submenus are unchanged without the flag.
+    expect(
+      homeListFilterSubmenuActions(buildHomeListFilterSections(customized)).map(
+        (action) => action.id,
+      ),
+    ).toEqual(["environment", "project", "status", "account"]);
+  });
+
+  it("is a top-level item of the sidebar menu only while a filter is set", () => {
+    const titles = (menu: HomeListFilterMenuState) =>
+      buildHomeListFilterMenu(menu, handlers()).items.map((item) => item.title);
+    expect(titles(state())).not.toContain("Reset filters");
+    expect(titles(customized).at(-1)).toBe("Reset filters");
+    // Saved status and account do nothing while the enhanced filter is off.
+    expect(titles(state({ enhanced: null }))).not.toContain("Reset filters");
+  });
+
+  it("runs the reset control from either menu", () => {
+    const actions = handlers();
+    applyHomeListFilterAction("reset", customized, actions);
+    expect(actions.onReset).toHaveBeenCalledTimes(1);
+    const item = buildHomeListFilterMenu(customized, actions).items.at(-1);
+    if (item?.type !== "action") throw new Error("expected the reset action");
+    item.onPress();
+    expect(actions.onReset).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("chip accessibility labels", () => {
+  it("name the filter and its selection", () => {
+    expect(homeListFilterChipAccessibilityLabels(state())).toEqual({
+      environment: "Filter threads by environment, All environments",
+      project: "Filter threads by project, All projects",
+      status: "Filter threads by status, All statuses",
+      account: "Filter threads by account, All accounts",
+    });
+    expect(
+      homeListFilterChipAccessibilityLabels(
+        state({
+          selectedEnvironmentId: ENV_B,
+          selectedProjectKeys: ["alpha", "beta"],
+          enhanced: {
+            ...ENHANCED,
+            statuses: ["working", "failed"],
+            selectedAccountKey: ENHANCED.accountOptions[1]!.key,
+          },
+        }),
+      ),
+    ).toEqual({
+      environment: "Filter threads by environment, Server",
+      project: "Filter threads by project, 2 projects",
+      status: "Filter threads by status, Working, Failed",
+      account: "Filter threads by account, Claude",
+    });
+  });
+
+  it("spell out every status even when the chip shortens them", () => {
+    expect(
+      homeListFilterChipAccessibilityLabels(
+        state({ enhanced: { ...ENHANCED, statuses: ["input", "working", "failed"] } }),
+      ).status,
+    ).toBe("Filter threads by status, Input, Working, Failed");
+  });
+
+  it("leave out status and account while the enhanced filter is off", () => {
+    expect(homeListFilterChipAccessibilityLabels(state({ enhanced: null }))).toMatchObject({
+      status: null,
+      account: null,
+    });
   });
 });
 

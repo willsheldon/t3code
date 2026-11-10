@@ -158,8 +158,11 @@ export function HomeRouteScreen() {
       }),
     [listOptions.projectGroupingMode, listOptions.selectedProjectKeys, projectScopes, projects],
   );
+  // The split view without the native primary column shows no filter menu: the sidebar owns it.
+  const showsSplitDetailOnly = layout.usesSplitView && !nativePrimaryColumn;
   const enhancedFilter = useEnhancedThreadFilterMenu({
-    enabled: listOptions.enhancedFilterEnabled,
+    enabled: listOptions.enhancedFilterEnabled && !showsSplitDetailOnly,
+    visible,
     threads,
     environments,
     environmentId: selectedEnvironmentId,
@@ -182,7 +185,7 @@ export function HomeRouteScreen() {
     onReset: resetFilters,
   };
 
-  if (layout.usesSplitView && !nativePrimaryColumn) {
+  if (showsSplitDetailOnly) {
     return (
       <>
         <NativeStackScreenOptions

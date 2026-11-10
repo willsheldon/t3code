@@ -39,6 +39,8 @@ export interface HomeListFilterMenuState {
   /** Several with the enhanced filter on; at most one without it. */
   readonly selectedProjectKeys: ReadonlyArray<string>;
   readonly enhanced: HomeListFilterMenuEnhanced | null;
+  /** The tablet sidebar explains "All environments" and "All projects" even without the enhanced filter. */
+  readonly sidebar?: boolean;
 }
 
 export interface HomeListFilterMenuHandlers {
@@ -48,7 +50,7 @@ export interface HomeListFilterMenuHandlers {
   readonly onAccountChange: (accountKey: string | null) => void;
 }
 
-/** The handlers plus the control that clears every filter. */
+/** The handlers plus the control that clears the filters the menus show. */
 export interface HomeListFilterControls extends HomeListFilterMenuHandlers {
   readonly onReset: () => void;
 }
@@ -70,6 +72,10 @@ export interface HomeListFilterMenuEntry {
   readonly keepsMenuPresented?: boolean;
 }
 
+/** The id of the menu entry that clears every filter the menus show. */
+export const HOME_LIST_FILTER_RESET_ID = "reset";
+const RESET_TITLE = "Reset filters";
+
 export interface HomeListFilterMenuSection {
   readonly id: "environment" | "project" | "status" | "account";
   readonly title: string;
@@ -87,6 +93,7 @@ export function buildHomeListFilterSections(
   state: HomeListFilterMenuState,
 ): ReadonlyArray<HomeListFilterMenuSection> {
   const { enhanced } = state;
+  const explainAll = enhanced !== null || state.sidebar === true;
   const sections: HomeListFilterMenuSection[] = [
     {
       id: "environment",
@@ -95,7 +102,7 @@ export function buildHomeListFilterSections(
         {
           id: "environment:all",
           title: "All environments",
-          subtitle: "Show threads from every environment",
+          ...(explainAll ? { subtitle: "Show threads from every environment" } : {}),
           state: onOff(state.selectedEnvironmentId === null),
         },
         ...state.environments.map((environment) => ({
@@ -114,7 +121,7 @@ export function buildHomeListFilterSections(
         {
           id: "project:all",
           title: "All projects",
-          subtitle: "Show threads from every project",
+          ...(explainAll ? { subtitle: "Show threads from every project" } : {}),
           state: onOff(state.selectedProjectKeys.length === 0),
         },
         ...state.projects.map((project) => ({
@@ -184,9 +191,10 @@ export function buildHomeListFilterSections(
 export function applyHomeListFilterAction(
   id: string,
   state: HomeListFilterMenuState,
-  handlers: HomeListFilterMenuHandlers,
+  handlers: HomeListFilterControls,
 ): void {
   const { enhanced } = state;
+  if (id === HOME_LIST_FILTER_RESET_ID) return handlers.onReset();
   if (id === "environment:all") return handlers.onEnvironmentChange(null);
   if (id.startsWith("environment:")) {
     const environment = state.environments.find(
@@ -234,15 +242,22 @@ export function homeListFilterMenuActions(
   }));
 }
 
-/** The menus as nested actions, for the Android toolbar menu. */
+/**
+ * The menus as nested actions, for the Android toolbar menu. `withReset` adds the entry that
+ * clears every filter; pass whether any filter is set.
+ */
 export function homeListFilterSubmenuActions(
   sections: ReadonlyArray<HomeListFilterMenuSection>,
+  withReset = false,
 ): MenuAction[] {
-  return sections.map((section) => ({
-    id: section.id,
-    title: section.title,
-    subactions: homeListFilterMenuActions(section.entries),
-  }));
+  return [
+    ...sections.map((section) => ({
+      id: section.id,
+      title: section.title,
+      subactions: homeListFilterMenuActions(section.entries),
+    })),
+    ...(withReset ? [{ id: HOME_LIST_FILTER_RESET_ID, title: RESET_TITLE }] : []),
+  ];
 }
 
 /** The label a chip or filter button shows for the selected statuses. */
@@ -269,6 +284,32 @@ export function accountFilterLabel(enhanced: HomeListFilterMenuEnhanced): string
   );
 }
 
+/** What a screen reader says for each chip: the filter and its current selection. */
+export function homeListFilterChipAccessibilityLabels(state: HomeListFilterMenuState) {
+  const { enhanced } = state;
+  const environment =
+    state.environments.find((candidate) => candidate.environmentId === state.selectedEnvironmentId)
+      ?.label ?? "All environments";
+  return {
+    environment: `Filter threads by environment, ${environment}`,
+    project: `Filter threads by project, ${projectFilterLabel(state.projects, state.selectedProjectKeys)}`,
+    status:
+      enhanced === null
+        ? null
+        : `Filter threads by status, ${
+            enhanced.statuses.length === 0
+              ? "All statuses"
+              : enhanced.statuses.map((status) => threadFilterStatusOption(status).label).join(", ")
+          }`,
+    account:
+      enhanced === null
+        ? null
+        : `Filter threads by account, ${
+            enhanced.selectedAccountKey === null ? "All accounts" : accountFilterLabel(enhanced)
+          }`,
+  };
+}
+
 type HomeListFilterMenuAction = {
   readonly type: "action";
   readonly title: string;
@@ -292,21 +333,26 @@ export interface HomeListFilterMenu {
 /** The menus as native header items, for the iOS sidebar. */
 export function buildHomeListFilterMenu(
   state: HomeListFilterMenuState,
-  handlers: HomeListFilterMenuHandlers,
+  handlers: HomeListFilterControls,
 ): HomeListFilterMenu {
   return {
     title: "Thread list options",
-    items: buildHomeListFilterSections(state).map((section) => ({
-      type: "submenu" as const,
-      title: section.title,
-      items: section.entries.map((entry) => ({
-        type: "action" as const,
-        title: entry.title,
-        ...(entry.subtitle === undefined ? {} : { subtitle: entry.subtitle }),
-        ...(entry.state === undefined ? {} : { state: entry.state }),
-        ...(entry.keepsMenuPresented ? { keepsMenuPresented: true } : {}),
-        onPress: () => applyHomeListFilterAction(entry.id, state, handlers),
+    items: [
+      ...buildHomeListFilterSections(state).map((section) => ({
+        type: "submenu" as const,
+        title: section.title,
+        items: section.entries.map((entry) => ({
+          type: "action" as const,
+          title: entry.title,
+          ...(entry.subtitle === undefined ? {} : { subtitle: entry.subtitle }),
+          ...(entry.state === undefined ? {} : { state: entry.state }),
+          ...(entry.keepsMenuPresented ? { keepsMenuPresented: true } : {}),
+          onPress: () => applyHomeListFilterAction(entry.id, state, handlers),
+        })),
       })),
-    })),
+      ...(isHomeListFilterCustomized(state)
+        ? [{ type: "action" as const, title: RESET_TITLE, onPress: handlers.onReset }]
+        : []),
+    ],
   };
 }

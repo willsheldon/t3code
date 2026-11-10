@@ -11,7 +11,11 @@ import {
 export type { HomeHeaderEnvironment } from "./HomeHeader.types";
 
 export function HomeHeader(props: HomeHeaderProps) {
-  const menuActions = homeListFilterSubmenuActions(buildHomeListFilterSections(props.filterState));
+  const filterCustomized = isHomeListFilterCustomized(props.filterState);
+  const menuActions = homeListFilterSubmenuActions(
+    buildHomeListFilterSections(props.filterState),
+    filterCustomized,
+  );
 
   return (
     <>
@@ -20,7 +24,7 @@ export function HomeHeader(props: HomeHeaderProps) {
         searchQuery={props.searchQuery}
         onSearchQueryChange={props.onSearchQueryChange}
         filterActions={menuActions}
-        filterCustomized={isHomeListFilterCustomized(props.filterState)}
+        filterCustomized={filterCustomized}
         onFilterAction={({ nativeEvent }) =>
           applyHomeListFilterAction(nativeEvent.event, props.filterState, props.filterControls)
         }

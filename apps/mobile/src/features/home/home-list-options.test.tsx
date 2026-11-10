@@ -129,3 +129,22 @@ it("behaves as before while the enhanced filter is off, and keeps the saved choi
   expect(harness.saved.at(-1)).toEqual({ threadListFilters: { ...SAVED, projectKeys: ["c"] } });
   unmount();
 });
+
+it("reset while the enhanced filter is off clears only the environment and project", async () => {
+  const { current, unmount } = await mountOptions({
+    enhancedFilterEnabled: false,
+    savedFilters: SAVED,
+  });
+  act(() => current.controls!.resetFilters());
+  expect(harness.saved).toEqual([
+    {
+      threadListFilters: {
+        environmentId: null,
+        projectKeys: [],
+        statuses: ["working"],
+        accountKey: '["env-1","codex"]',
+      },
+    },
+  ]);
+  unmount();
+});

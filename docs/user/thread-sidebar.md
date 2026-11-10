@@ -266,13 +266,15 @@ Your rules are kept and come back when you turn it on again.
 The mobile app has the same status, account and project filters. They are native
 menus instead of a popover, and mobile has no title rules yet.
 
-- **Phone.** The row under the thread list's search holds a chip per filter:
-  **Status**, **Account**, a project chip and an environment chip. On Android the
+- **Phone.** The row under the thread list's search holds a chip per filter, in
+  this order: environment, project, **Status** and **Account**. On Android the
   same filters are in the filter menu beside the search field. A chip shows the
-  selection, such as **Working, Failed** or **3 projects**. The **x** at the end of
-  the row clears every filter.
+  selection, such as **Working, Failed** or **3 projects**.
 - **Tablet.** The filter button in the sidebar header opens the same menus as
   submenus.
+- **Reset.** The **x** at the end of the chip row clears every filter on iOS
+  phones. The Android filter menu and the tablet filter button have a **Reset
+  filters** entry instead. Both appear only while a filter is set.
 - **Status** lists **Input**, **Working**, **Failed** and **Done** with how many
   threads each would show, such as **3 threads**. Done reads **40+ threads** while
   older settled threads are not loaded. **Clear status** appears once one is
@@ -290,8 +292,11 @@ task that is still being created is hidden while a status or account filter is s
 because it has no status yet. The filters are remembered on this device.
 
 To turn the new filters off, use **Settings → General → Enhanced thread filter**.
-The environment menu and a single project choice stay, as they were. Your saved
-status, account and projects come back when you turn it on again.
+The environment menu and a single project choice stay, as they were. While it is
+off, picking a project replaces the saved project list with that one project.
+**Reset** clears only the environment and project. When you turn the filter on
+again, your saved status and account come back. So do your saved projects, unless
+you picked a project or used **Reset** while it was off.
 
 ## Find and reference work
 

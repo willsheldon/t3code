@@ -1,4 +1,3 @@
-import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import type { ThreadFilterStatus } from "@t3tools/client-runtime/state/thread-filters";
 import type { EnvironmentId, ScopedProjectRef } from "@t3tools/contracts";
@@ -8,6 +7,7 @@ import { useOlderSettledShelf } from "../../state/olderSettledShelf";
 import { threadListEnvironmentsAtom } from "../../state/presentation";
 import { olderSettledScopes, unloadedSettled } from "../threads/useThreadListV2";
 import type { HomeListFilterMenuEnhanced } from "./home-list-filter-menu";
+import { useAtomValueWhileVisible } from "./home-route-visibility";
 import {
   countThreadListStatuses,
   projectRefKeys,
@@ -16,10 +16,13 @@ import {
 
 /**
  * What the status and account menus show, or null while the enhanced filter is off. The counts
- * and account list walk every thread, so nothing is computed when it is off.
+ * and account list walk every thread, so nothing is computed when it is off. Pass `enabled:
+ * false` as well where the menus are not shown. `visible` stops reading the environments atom
+ * while Home sits under a pushed Thread.
  */
 export function useEnhancedThreadFilterMenu(input: {
   readonly enabled: boolean;
+  readonly visible?: boolean;
   readonly threads: ReadonlyArray<EnvironmentThreadShell>;
   readonly environments: ReadonlyArray<{
     readonly environmentId: EnvironmentId;
@@ -31,8 +34,9 @@ export function useEnhancedThreadFilterMenu(input: {
   readonly accountKey: string | null;
 }): HomeListFilterMenuEnhanced | null {
   const { enabled, threads } = input;
-  const { providersByEnvironmentId, settlementEnvironmentIds } = useAtomValue(
+  const { providersByEnvironmentId, settlementEnvironmentIds } = useAtomValueWhileVisible(
     threadListEnvironmentsAtom,
+    enabled && (input.visible ?? true),
   );
   const accountOptions = useMemo(
     () =>

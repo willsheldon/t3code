@@ -5,6 +5,7 @@ import {
   accountFilterLabel,
   applyHomeListFilterAction,
   buildHomeListFilterSections,
+  homeListFilterChipAccessibilityLabels,
   homeListFilterMenuActions,
   isHomeListFilterCustomized,
   projectFilterLabel,
@@ -24,6 +25,7 @@ export function ThreadListFilters(
     (environment) => environment.environmentId === filterState.selectedEnvironmentId,
   );
   const sections = buildHomeListFilterSections(filterState);
+  const labels = homeListFilterChipAccessibilityLabels(filterState);
   const chip = (id: "environment" | "project" | "status" | "account") => {
     const section = sections.find((candidate) => candidate.id === id);
     return section === undefined
@@ -48,7 +50,8 @@ export function ThreadListFilters(
       {environmentChip === null ? null : (
         <ListFilterMenu
           label={selectedEnvironment?.label ?? "All environments"}
-          accessibilityLabel="Filter threads by environment"
+          title="Filter threads by environment"
+          accessibilityLabel={labels.environment}
           active={selectedEnvironment !== undefined}
           {...environmentChip}
         />
@@ -56,7 +59,8 @@ export function ThreadListFilters(
       {projectChip === null ? null : (
         <ListFilterMenu
           label={projectFilterLabel(filterState.projects, filterState.selectedProjectKeys)}
-          accessibilityLabel="Filter threads by project"
+          title="Filter threads by project"
+          accessibilityLabel={labels.project}
           active={filterState.selectedProjectKeys.length > 0}
           {...projectChip}
         />
@@ -64,7 +68,8 @@ export function ThreadListFilters(
       {statusChip === null || enhanced === null ? null : (
         <ListFilterMenu
           label={statusFilterLabel(enhanced.statuses)}
-          accessibilityLabel="Filter threads by status"
+          title="Filter threads by status"
+          accessibilityLabel={labels.status ?? "Filter threads by status"}
           active={enhanced.statuses.length > 0}
           {...statusChip}
         />
@@ -72,7 +77,8 @@ export function ThreadListFilters(
       {accountChip === null || enhanced === null ? null : (
         <ListFilterMenu
           label={accountFilterLabel(enhanced)}
-          accessibilityLabel="Filter threads by account"
+          title="Filter threads by account"
+          accessibilityLabel={labels.account ?? "Filter threads by account"}
           active={enhanced.selectedAccountKey !== null}
           {...accountChip}
         />

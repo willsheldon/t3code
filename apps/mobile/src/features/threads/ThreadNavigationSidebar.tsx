@@ -384,6 +384,7 @@ function ThreadNavigationSidebarPane(
     projects: projectFilterOptions,
     selectedProjectKeys: projectFilter.keys,
     enhanced: enhancedFilter,
+    sidebar: true,
   };
   const filterControls = {
     onEnvironmentChange: setSelectedEnvironmentId,
@@ -392,7 +393,10 @@ function ThreadNavigationSidebarPane(
     onAccountChange: setSelectedAccountKey,
     onReset: resetFilters,
   };
-  const listMenuActions = homeListFilterSubmenuActions(buildHomeListFilterSections(filterState));
+  const listMenuActions = homeListFilterSubmenuActions(
+    buildHomeListFilterSections(filterState),
+    isHomeListFilterCustomized(filterState),
+  );
   const handleListMenuAction = ({
     nativeEvent,
   }: {

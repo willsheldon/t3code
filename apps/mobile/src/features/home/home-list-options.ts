@@ -135,12 +135,13 @@ export function useHomeListOptions(availableEnvironmentIds: ReadonlySet<Environm
   const setSelectedAccountKey = (value: string | null) => {
     updateOptions({ selectedAccountKey: value });
   };
+  // Clears what the menus show. While the enhanced filter is off the saved status and account
+  // are hidden, so they stay for when it is turned on again.
   const resetFilters = () => {
     updateOptions({
       selectedEnvironmentId: null,
       selectedProjectKeys: NO_PROJECT_KEYS,
-      selectedStatuses: NO_STATUSES,
-      selectedAccountKey: null,
+      ...(enhancedFilterEnabled ? { selectedStatuses: NO_STATUSES, selectedAccountKey: null } : {}),
     });
   };
   const setProjectSortOrder = (value: HomeProjectSortOrder) => {
