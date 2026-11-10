@@ -641,6 +641,7 @@ function AdaptiveWorkspaceLayoutContent(
   const handleOpenEnvironmentSettings = () => {
     openSettings(navigation, "SettingsEnvironments");
   };
+  const handleOpenFilterRules = () => navigation.navigate("HomeFilters");
 
   const handleOpenThreadPullRequests = useOpenThreadPullRequests();
   const { openPendingTask: handleOpenPendingTask } =
@@ -959,6 +960,7 @@ function AdaptiveWorkspaceLayoutContent(
                     selectedThreadKey={selectedThreadKey}
                     onOpenSettings={handleOpenSettings}
                     onOpenEnvironmentSettings={handleOpenEnvironmentSettings}
+                    onOpenFilterRules={handleOpenFilterRules}
                     onNewThreadInProject={handleNewThreadInProject}
                     onNewThreadOnBranch={handleNewThreadOnBranch}
                     onOpenPendingTask={handleOpenPendingTask}

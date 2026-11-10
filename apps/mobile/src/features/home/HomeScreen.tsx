@@ -88,6 +88,7 @@ import { createSwipeRowActivation } from "./swipe-row-activation";
 import { SwipeableScrollGateProvider, useSwipeableScrollGate } from "./thread-swipe-actions";
 import { useFabScroll } from "./FabScrollContext";
 import { useWorkspaceTabs } from "../workspace/WorkspaceTabsContext";
+import { threadFilterGuardStore } from "./thread-filter-guard-store";
 import { ThreadListFilters } from "./ThreadListFilters";
 
 interface HomeScreenProps {
@@ -137,6 +138,7 @@ interface HomeScreenProps {
 }
 
 const NO_FILTER_STATUSES: ResolvedHomeListOptions["selectedStatuses"] = [];
+const NO_FILTER_RULES: ResolvedHomeListOptions["titleRules"] = [];
 const ESTIMATED_THREAD_LIST_V2_ROW_HEIGHT = 72;
 // Rows away from the viewport skip their swipe actions (see
 // swipe-row-activation), so render further ahead: a fast fling then reaches
@@ -391,6 +393,7 @@ export function HomeScreen(props: HomeScreenProps) {
   const filterAccountKey = listOptions.enhancedFilterEnabled
     ? listOptions.selectedAccountKey
     : null;
+  const filterRules = listOptions.enhancedFilterEnabled ? listOptions.titleRules : NO_FILTER_RULES;
   const filterKeys = filterState.selectedProjectKeys;
   // An archived project's filter reads as all projects, matching the filter menu.
   const projectFilter = useMemo(
@@ -438,6 +441,7 @@ export function HomeScreen(props: HomeScreenProps) {
     projectFilter.keys,
     filterStatuses,
     filterAccountKey,
+    filterRules,
     props.searchQuery.trim(),
   ]);
   const [lastSettledResetKey, setLastSettledResetKey] = useState(settledResetKey);
@@ -486,6 +490,8 @@ export function HomeScreen(props: HomeScreenProps) {
     projectRefs: projectFilter.projectRefs,
     statuses: filterStatuses,
     accountKey: filterAccountKey,
+    titleRules: filterRules,
+    guardStore: threadFilterGuardStore,
     searchQuery: props.searchQuery,
     searchMatches: threadSearchMatchByKey,
     settlementEnvironmentIds,

@@ -167,7 +167,10 @@ export function HomeRouteScreen() {
         )}
         <HomeHeader
           filterState={filterState}
-          filterControls={filterControls}
+          filterControls={{
+            ...filterControls,
+            onOpenRules: () => navigation.navigate("HomeFilters"),
+          }}
           searchQuery={searchQuery}
           onOpenEnvironments={() => openSettings(navigation, "SettingsEnvironments")}
           onOpenSettings={() => selectTab("settings")}
