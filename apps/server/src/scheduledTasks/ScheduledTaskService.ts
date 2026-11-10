@@ -794,6 +794,60 @@ export const layer = Layer.effect(
         ),
     );
 
+    /**
+     * Whether the bound thread already holds a queued run this task sent. A started run does
+     * not count. A failed lookup reads as no, so a firing is never lost to a read error.
+     */
+    const hasQueuedRunFromTask = Effect.fn("ScheduledTaskService.hasQueuedRunFromTask")(
+      function* (task: ScheduledTask & { readonly threadId: ThreadId }) {
+        const target = { projectId: task.projectId, threadId: task.threadId };
+        const { runs } = yield* threadManagement.getProjectThreadRecords(target, ["runs"], {
+          runStatuses: ["queued"],
+        });
+        if (runs.length === 0) return false;
+        const { messages } = yield* threadManagement.getProjectThreadRecords(target, ["messages"], {
+          messageRunIds: runs.map((run) => run.id),
+          messageRoles: ["user"],
+        });
+        return messages.some((message) => message.scheduledTaskId === task.id);
+      },
+      Effect.catch((cause) =>
+        Effect.logWarning("Could not check for a queued run from this schedule", { cause }).pipe(
+          Effect.as(false),
+        ),
+      ),
+    );
+
+    /** Records a firing that was skipped and moves the schedule on. Not counted as a run. */
+    const skipPendingRun = Effect.fn("ScheduledTaskService.skipPendingRun")(function* (
+      task: ScheduledTask,
+      now: DateTime.DateTime,
+    ) {
+      const next = nextRunAt(task, now);
+      const rows = yield* sql<{ task_id: string }>`
+        UPDATE scheduled_tasks
+        SET next_run_at = ${next},
+            last_run_status = 'skipped-pending',
+            updated_at = ${iso(now)}
+        WHERE task_id = ${task.id}
+          AND last_run_status <> 'running'
+          AND next_run_at IS ${task.nextRunAt}
+        RETURNING task_id
+      `.pipe(
+        Effect.mapError((cause) =>
+          taskError("Could not record skipped schedule task run.", { taskId: task.id, cause }),
+        ),
+      );
+      if (rows.length === 0) return task;
+      yield* notifyChanged;
+      return {
+        ...task,
+        nextRunAt: next,
+        lastRunStatus: "skipped-pending" as const,
+        updatedAt: iso(now),
+      };
+    });
+
     const runTask = Effect.fn("ScheduledTaskService.runTask")(function* (
       task: ScheduledTask,
       trigger: "scheduled" | "manual" | "webhook",
@@ -840,6 +894,20 @@ export const layer = Layer.effect(
             DateTime.toEpochMillis(parsedNextRunAt.value) > DateTime.toEpochMillis(startedAt))
         ) {
           return { task: active, threadId: null, dispatchFailed: false };
+        }
+        // A busy thread already holds this schedule's queued run, so another would only add
+        // an identical entry to the backlog. Wait for the next interval.
+        if (
+          trigger === "scheduled" &&
+          active.schedule.type === "interval" &&
+          active.threadId !== null &&
+          (yield* hasQueuedRunFromTask({ ...active, threadId: active.threadId }))
+        ) {
+          return {
+            task: yield* skipPendingRun(active, startedAt),
+            threadId: null,
+            dispatchFailed: false,
+          };
         }
         // Reject queued deliveries after pause, same-id recreation or trigger changes.
         if (webhook !== undefined) {
