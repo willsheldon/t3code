@@ -1,7 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
-import { compileSidebarTitleRules, newSidebarTitleRule } from "./enhancedFilter";
+import {
+  compileThreadTitleRules,
+  newThreadTitleRule,
+} from "@t3tools/client-runtime/state/thread-filters";
 import {
   ProjectFilterSection,
   SidebarEnhancedFilterChips,
@@ -66,7 +69,7 @@ describe("StatusFilterSection", () => {
 
 describe("SidebarEnhancedFilterChips", () => {
   const rules = ["a", "b", "c", "d", "e"].map((pattern) => ({
-    ...newSidebarTitleRule(pattern),
+    ...newThreadTitleRule(pattern),
     pattern,
   }));
 
@@ -76,7 +79,7 @@ describe("SidebarEnhancedFilterChips", () => {
         statuses={["input", "done"]}
         onStatusToggle={() => {}}
         rules={rules}
-        compiled={compileSidebarTitleRules(rules)}
+        compiled={compileThreadTitleRules(rules)}
         onRulesChange={() => {}}
         accountOptions={[]}
         selectedAccountKey={null}

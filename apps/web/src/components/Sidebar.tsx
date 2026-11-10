@@ -183,7 +183,6 @@ import {
   groupSidebarThreadsByProject,
   sidebarFolderExpansionKeys,
   isSidebarHiddenThread,
-  sidebarThreadAccountKey,
   buildBulkTitleRegenerationContextMenuItem,
   buildBulkUnpinContextMenuItem,
   deleteSelectedThreadEntries,
@@ -219,21 +218,24 @@ import {
   resolveThreadLastVisitedAt,
 } from "./Sidebar.logic";
 import {
-  SIDEBAR_ENHANCED_FILTER_KEY,
-  SidebarEnhancedFilterStoredSchema,
-  type SidebarTitleRule,
-  compileSidebarTitleRules,
-  initializeSidebarEnhancedFilter,
-  NO_SIDEBAR_STATUS_FILTERS,
+  NO_THREAD_FILTER_STATUSES,
+  THREAD_FILTER_KEY,
+  ThreadFilterStatusesSchema,
+  ThreadFilterStoredSchema,
+  type ThreadFilterStatus,
+  type ThreadTitleRule,
+  compileThreadTitleRules,
+  countThreadFilterStatuses,
+  hasLiveThreadFilters,
+  initializeThreadFilter,
+  matchesThreadFilters,
+  resolveThreadFilterStatus,
+  threadAccountKey,
+  toggleThreadFilterStatus,
+  warmThreadTitleRuleCache,
+} from "@t3tools/client-runtime/state/thread-filters";
+import {
   SIDEBAR_STATUS_FILTER_KEY,
-  type SidebarStatusFilter,
-  SidebarStatusFiltersSchema,
-  countSidebarThreadStatuses,
-  hasLiveSidebarThreadFilters,
-  matchesSidebarThreadFilters,
-  sidebarThreadStatusFilter,
-  toggleSidebarStatusFilter,
-  warmSidebarTitleRuleCache,
   sidebarSettledFilterCounts,
   sidebarSettledPageThreads,
 } from "./sidebar/enhancedFilter";
@@ -399,10 +401,10 @@ interface SidebarThreadPartitionInput {
   // on the clock, so the minute tick, the precise snooze-wake tick and the inbox
   // tracker's expiry version are inputs: a new key repartitions.
   readonly clockKey: string;
-  readonly compiledTitleRules: ReturnType<typeof compileSidebarTitleRules>;
+  readonly compiledTitleRules: ReturnType<typeof compileThreadTitleRules>;
   readonly enhancedFilterEnabled: boolean;
   readonly selectedAccountKey: string | null;
-  readonly selectedStatuses: ReadonlyArray<SidebarStatusFilter>;
+  readonly selectedStatuses: ReadonlyArray<ThreadFilterStatus>;
   readonly statusCountsWanted: boolean;
   readonly localLastVisitedAtById: Readonly<Record<string, string>>;
   readonly filterExemptThreadKey: string | null;
@@ -461,7 +463,7 @@ function routeThreadOnly(
 // Separate hooks cache maps independently of later Sidebar hooks and preserve dnd-kit inputs.
 function useSidebarThreads(input: {
   readonly projectScopeKey: string | null;
-  readonly titleRules: ReadonlyArray<SidebarTitleRule>;
+  readonly titleRules: ReadonlyArray<ThreadTitleRule>;
   readonly scopedProjectKeys: ReadonlySet<string> | null;
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
   readonly connectedEnvironmentIds: readonly EnvironmentId[];
@@ -473,10 +475,10 @@ function useSidebarThreads(input: {
   readonly folderGroups: readonly SidebarProjectSnapshot[] | null;
   // Keeps folders with no active threads, so a project the user filtered to or pinned can start one.
   readonly keepEmptyFolders: (group: SidebarProjectSnapshot) => boolean;
-  readonly compiledTitleRules: ReturnType<typeof compileSidebarTitleRules>;
+  readonly compiledTitleRules: ReturnType<typeof compileThreadTitleRules>;
   readonly enhancedFilterEnabled: boolean;
   readonly selectedAccountKey: string | null;
-  readonly selectedStatuses: ReadonlyArray<SidebarStatusFilter>;
+  readonly selectedStatuses: ReadonlyArray<ThreadFilterStatus>;
   readonly statusCountsWanted: boolean;
 }) {
   const {
@@ -544,7 +546,7 @@ function useSidebarThreads(input: {
   const setProjectExpanded = useUiStateStore((store) => store.setProjectExpanded);
   const threadFiltersActive =
     enhancedFilterEnabled &&
-    hasLiveSidebarThreadFilters({
+    hasLiveThreadFilters({
       compiled: compiledTitleRules,
       accountKey: selectedAccountKey,
       statuses: selectedStatuses,
@@ -739,20 +741,20 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
   const inScope = filterSidebarV2VisibleThreads(threads, scopedProjectKeys, delegatedUnderParent);
   const threadFiltersActive =
     input.enhancedFilterEnabled &&
-    hasLiveSidebarThreadFilters({
+    hasLiveThreadFilters({
       compiled: input.compiledTitleRules,
       accountKey: input.selectedAccountKey,
       statuses: input.selectedStatuses,
     });
   if (threadFiltersActive) {
-    warmSidebarTitleRuleCache(
+    warmThreadTitleRuleCache(
       input.compiledTitleRules,
       inScope.map((thread) => thread.title),
       browserFilterStore(),
     );
   }
   const statusOf = (thread: EnvironmentThreadShell) =>
-    sidebarThreadStatusFilter({
+    resolveThreadFilterStatus({
       ...thread,
       lastVisitedAt: resolveThreadLastVisitedAt(
         thread.lastVisitedAt,
@@ -761,7 +763,7 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
     });
   const visible = threadFiltersActive
     ? inScope.filter((thread) =>
-        matchesSidebarThreadFilters(thread, {
+        matchesThreadFilters(thread, {
           compiled: input.compiledTitleRules,
           accountKey: input.selectedAccountKey,
           isOpen: threadShellKey(thread) === input.filterExemptThreadKey,
@@ -772,9 +774,9 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
   // Each count ignores the status selection, so a count says what selecting that status would show.
   const statusCounts =
     input.enhancedFilterEnabled && input.statusCountsWanted
-      ? countSidebarThreadStatuses(
+      ? countThreadFilterStatuses(
           inScope.filter((thread) =>
-            matchesSidebarThreadFilters(thread, {
+            matchesThreadFilters(thread, {
               compiled: input.compiledTitleRules,
               accountKey: input.selectedAccountKey,
               isOpen: false,
@@ -1273,7 +1275,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     const options = new Map<string, { key: string; label: string }>();
     for (const thread of threads) {
       if (thread.archivedAt !== null || isSidebarHiddenThread(thread)) continue;
-      const key = sidebarThreadAccountKey(thread);
+      const key = threadAccountKey(thread);
       if (options.has(key)) continue;
       const name =
         providerEntriesByEnvironment.get(thread.environmentId)?.get(thread.providerInstanceId)
@@ -1290,17 +1292,17 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   // Runs once, before the rules are read: drops corrupt data, migrates the old
   // single-field filter, and turns off a regex that hung the last run.
   const [enhancedFilterInitial] = useState(() =>
-    initializeSidebarEnhancedFilter(browserFilterStore(), randomUUID),
+    initializeThreadFilter(browserFilterStore(), randomUUID),
   );
   const [enhancedFilter, setEnhancedFilter] = useLocalStorage(
-    SIDEBAR_ENHANCED_FILTER_KEY,
+    THREAD_FILTER_KEY,
     enhancedFilterInitial,
-    SidebarEnhancedFilterStoredSchema,
+    ThreadFilterStoredSchema,
   );
   const titleRules = enhancedFilter.rules;
-  const compiledTitleRules = compileSidebarTitleRules(titleRules);
+  const compiledTitleRules = compileThreadTitleRules(titleRules);
   const setTitleRules = (
-    update: (rules: ReadonlyArray<SidebarTitleRule>) => ReadonlyArray<SidebarTitleRule>,
+    update: (rules: ReadonlyArray<ThreadTitleRule>) => ReadonlyArray<ThreadTitleRule>,
   ) => setEnhancedFilter((current) => ({ rules: update(current.rules) }));
   const [enhancedFilterOpen, setEnhancedFilterOpen] = useState(false);
   const [selectedAccountKey, setSelectedAccountKey] = useLocalStorage(
@@ -1310,11 +1312,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   );
   const [selectedStatuses, setSelectedStatuses] = useLocalStorage(
     SIDEBAR_STATUS_FILTER_KEY,
-    NO_SIDEBAR_STATUS_FILTERS,
-    SidebarStatusFiltersSchema,
+    NO_THREAD_FILTER_STATUSES,
+    ThreadFilterStatusesSchema,
   );
-  const toggleSelectedStatus = (status: SidebarStatusFilter) =>
-    setSelectedStatuses((current) => toggleSidebarStatusFilter(current, status));
+  const toggleSelectedStatus = (status: ThreadFilterStatus) =>
+    setSelectedStatuses((current) => toggleThreadFilterStatus(current, status));
   // Off means no enhanced filtering at all, account included, so nothing hidden
   // is left applying. The stored rules and account come back when it is on.
   const enhancedFilterKey = enhancedFilterEnabled
@@ -3222,7 +3224,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                     statusCounts={statusCounts}
                     doneHasMore={doneHasMore}
                     onStatusToggle={toggleSelectedStatus}
-                    onStatusesClear={() => setSelectedStatuses(NO_SIDEBAR_STATUS_FILTERS)}
+                    onStatusesClear={() => setSelectedStatuses(NO_THREAD_FILTER_STATUSES)}
                     hiddenCount={enhancedHiddenCount}
                     rules={titleRules}
                     compiled={compiledTitleRules}
@@ -3974,7 +3976,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                   </button>
                 </>
               ) : enhancedFilterEnabled &&
-                hasLiveSidebarThreadFilters({
+                hasLiveThreadFilters({
                   compiled: compiledTitleRules,
                   accountKey: selectedAccountKey,
                   statuses: selectedStatuses,

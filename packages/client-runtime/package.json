@@ -363,6 +363,10 @@
       "types": "./src/state/threadUndo.ts",
       "default": "./src/state/threadUndo.ts"
     },
+    "./state/thread-filters": {
+      "types": "./src/state/threadFilters.ts",
+      "default": "./src/state/threadFilters.ts"
+    },
     "./state/thread-settled": {
       "types": "./src/state/threadSettled.ts",
       "default": "./src/state/threadSettled.ts"

@@ -15,7 +15,6 @@ import {
 } from "react";
 
 import { cn, randomUUID } from "~/lib/utils";
-import { SIDEBAR_UNAVAILABLE_ACCOUNT_LABEL } from "../Sidebar.logic";
 import { Button } from "../ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
@@ -25,31 +24,35 @@ import { Toggle } from "../ui/toggle";
 import { Toggle as ToggleGroupItem, ToggleGroup } from "../ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
-  type CompiledSidebarTitleRules,
-  SIDEBAR_STATUS_OPTIONS,
-  SIDEBAR_TITLE_RULE_LIMIT,
-  type SidebarStatusCounts,
-  type SidebarStatusFilter,
-  type SidebarTitleRule,
+  THREAD_FILTER_STATUS_OPTIONS,
+  THREAD_TITLE_RULE_LIMIT,
+  UNAVAILABLE_ACCOUNT_LABEL,
+  type CompiledThreadTitleRules,
+  type ThreadFilterStatus,
+  type ThreadFilterStatusCounts,
+  type ThreadTitleRule,
+  insertThreadTitleRule,
+  newThreadTitleRule,
+  removeThreadTitleRule,
+  setThreadTitleRuleEnabled,
+  setThreadTitleRulePattern,
+  threadFilterStatusOption,
+  threadTitleRuleFocusAfterRemoval,
+  threadTitleRuleText,
+  updateThreadTitleRule,
+} from "@t3tools/client-runtime/state/thread-filters";
+import {
+  SIDEBAR_STATUS_DOT_CLASS,
   filterSidebarProjectOptions,
   hasSidebarEnhancedFilterContent,
-  insertSidebarTitleRule,
-  newSidebarTitleRule,
-  removeSidebarTitleRule,
-  setSidebarTitleRuleEnabled,
-  setSidebarTitleRulePattern,
   sidebarEnhancedFilterBadgeCount,
   sidebarEnhancedFilterButtonLabel,
-  sidebarStatusOption,
-  sidebarTitleRuleFocusAfterRemoval,
-  sidebarTitleRuleText,
-  updateSidebarTitleRule,
 } from "./enhancedFilter";
 import { SidebarHeaderIconButton } from "./SidebarThreadHeader";
 
 type AccountOption = { readonly key: string; readonly label: string };
 type ProjectOption = { readonly key: string; readonly label: string };
-type RulesUpdate = (rules: ReadonlyArray<SidebarTitleRule>) => ReadonlyArray<SidebarTitleRule>;
+type RulesUpdate = (rules: ReadonlyArray<ThreadTitleRule>) => ReadonlyArray<ThreadTitleRule>;
 
 const PATTERN_SAVE_DELAY_MS = 150;
 const MAX_CHIPS = 6;
@@ -150,7 +153,7 @@ function TitleRuleRow({
   onInsertAfter,
   onRemove,
 }: {
-  rule: SidebarTitleRule;
+  rule: ThreadTitleRule;
   number: number;
   error: string | undefined;
   canInsert: boolean;
@@ -160,7 +163,7 @@ function TitleRuleRow({
   onRemove: () => void;
 }) {
   const [draft, setDraft] = useDebouncedPattern(rule.pattern, (pattern) =>
-    onRulesChange((rules) => setSidebarTitleRulePattern(rules, rule.id, pattern)),
+    onRulesChange((rules) => setThreadTitleRulePattern(rules, rule.id, pattern)),
   );
   const errorId = `sidebar-filter-rule-${rule.id}-error`;
   return (
@@ -170,7 +173,7 @@ function TitleRuleRow({
           size="sm"
           checked={rule.enabled}
           onCheckedChange={(checked) =>
-            onRulesChange((rules) => setSidebarTitleRuleEnabled(rules, rule.id, Boolean(checked)))
+            onRulesChange((rules) => setThreadTitleRuleEnabled(rules, rule.id, Boolean(checked)))
           }
           aria-label={`Rule ${number} enabled`}
         />
@@ -183,7 +186,7 @@ function TitleRuleRow({
             const next = value[0];
             // Clicking the pressed segment reports an empty value; mode stays set.
             if (next !== "hide" && next !== "only") return;
-            onRulesChange((rules) => updateSidebarTitleRule(rules, rule.id, { mode: next }));
+            onRulesChange((rules) => updateThreadTitleRule(rules, rule.id, { mode: next }));
           }}
         >
           <ToggleGroupItem value="hide" aria-label={`Rule ${number}: hide matches`}>
@@ -224,7 +227,7 @@ function TitleRuleRow({
                     pressed={rule.regex}
                     onPressedChange={(pressed) =>
                       onRulesChange((rules) =>
-                        updateSidebarTitleRule(rules, rule.id, { regex: pressed, tripped: false }),
+                        updateThreadTitleRule(rules, rule.id, { regex: pressed, tripped: false }),
                       )
                     }
                     aria-label={`Rule ${number} use regular expression`}
@@ -265,12 +268,12 @@ export function StatusFilterSection({
   onClear,
   firstOptionRef,
 }: {
-  selected: ReadonlyArray<SidebarStatusFilter>;
+  selected: ReadonlyArray<ThreadFilterStatus>;
   /** Null until the popover needs them; counting walks every thread. */
-  counts: SidebarStatusCounts | null;
+  counts: ThreadFilterStatusCounts | null;
   /** Older settled threads are not loaded, so the Done count is a lower bound. */
   doneHasMore: boolean;
-  onToggle: (status: SidebarStatusFilter) => void;
+  onToggle: (status: ThreadFilterStatus) => void;
   onClear: () => void;
   firstOptionRef?: (element: HTMLButtonElement | null) => void;
 }) {
@@ -286,7 +289,7 @@ export function StatusFilterSection({
         }
       />
       <div role="group" aria-label="Status" className="grid grid-cols-2 gap-1">
-        {SIDEBAR_STATUS_OPTIONS.map((option, index) => {
+        {THREAD_FILTER_STATUS_OPTIONS.map((option, index) => {
           const isSelected = selected.includes(option.value);
           const count = counts?.[option.value];
           return (
@@ -310,7 +313,12 @@ export function StatusFilterSection({
                   {isSelected ? (
                     <CheckIcon className="size-3 text-primary" />
                   ) : (
-                    <span className={cn("size-1.5 rounded-full", option.dotClass)} />
+                    <span
+                      className={cn(
+                        "size-1.5 rounded-full",
+                        SIDEBAR_STATUS_DOT_CLASS[option.value],
+                      )}
+                    />
                   )}
                 </span>
                 <span className="truncate">{option.label}</span>
@@ -457,14 +465,14 @@ export function SidebarEnhancedFilterButton({
   onStatusesClear,
   hiddenCount,
 }: {
-  statuses: ReadonlyArray<SidebarStatusFilter>;
-  statusCounts: SidebarStatusCounts | null;
+  statuses: ReadonlyArray<ThreadFilterStatus>;
+  statusCounts: ThreadFilterStatusCounts | null;
   doneHasMore: boolean;
-  onStatusToggle: (status: SidebarStatusFilter) => void;
+  onStatusToggle: (status: ThreadFilterStatus) => void;
   onStatusesClear: () => void;
   hiddenCount: number;
-  rules: ReadonlyArray<SidebarTitleRule>;
-  compiled: CompiledSidebarTitleRules;
+  rules: ReadonlyArray<ThreadTitleRule>;
+  compiled: CompiledThreadTitleRules;
   onRulesChange: (update: RulesUpdate) => void;
   accountOptions: ReadonlyArray<AccountOption>;
   selectedAccountKey: string | null;
@@ -513,7 +521,7 @@ export function SidebarEnhancedFilterButton({
     selectedProjectNames.length,
     statuses.length,
   );
-  const atLimit = rules.length >= SIDEBAR_TITLE_RULE_LIMIT;
+  const atLimit = rules.length >= THREAD_TITLE_RULE_LIMIT;
   const accountMissing =
     selectedAccountKey !== null &&
     !accountOptions.some((option) => option.key === selectedAccountKey);
@@ -521,18 +529,18 @@ export function SidebarEnhancedFilterButton({
     { value: "", label: "All accounts" },
     ...accountOptions.map((option) => ({ value: option.key, label: option.label })),
     ...(accountMissing && selectedAccountKey !== null
-      ? [{ value: selectedAccountKey, label: SIDEBAR_UNAVAILABLE_ACCOUNT_LABEL }]
+      ? [{ value: selectedAccountKey, label: UNAVAILABLE_ACCOUNT_LABEL }]
       : []),
   ];
 
   const insertAfter = (afterId: string | null) => {
     const id = randomUUID();
-    onRulesChange((current) => insertSidebarTitleRule(current, afterId, newSidebarTitleRule(id)));
+    onRulesChange((current) => insertThreadTitleRule(current, afterId, newThreadTitleRule(id)));
     pendingFocusRef.current = id;
   };
   const remove = (id: string) => {
-    pendingFocusRef.current = sidebarTitleRuleFocusAfterRemoval(rules, id) ?? "add";
-    onRulesChange((current) => removeSidebarTitleRule(current, id));
+    pendingFocusRef.current = threadTitleRuleFocusAfterRemoval(rules, id) ?? "add";
+    onRulesChange((current) => removeThreadTitleRule(current, id));
   };
 
   return (
@@ -672,7 +680,7 @@ export function SidebarEnhancedFilterButton({
                     </TooltipTrigger>
                     {atLimit ? (
                       <TooltipPopup side="top">
-                        {SIDEBAR_TITLE_RULE_LIMIT} rules maximum
+                        {THREAD_TITLE_RULE_LIMIT} rules maximum
                       </TooltipPopup>
                     ) : null}
                   </Tooltip>
@@ -726,10 +734,10 @@ export function SidebarEnhancedFilterChips({
   hiddenCount,
   onOpenFilter,
 }: {
-  statuses: ReadonlyArray<SidebarStatusFilter>;
-  onStatusToggle: (status: SidebarStatusFilter) => void;
-  rules: ReadonlyArray<SidebarTitleRule>;
-  compiled: CompiledSidebarTitleRules;
+  statuses: ReadonlyArray<ThreadFilterStatus>;
+  onStatusToggle: (status: ThreadFilterStatus) => void;
+  rules: ReadonlyArray<ThreadTitleRule>;
+  compiled: CompiledThreadTitleRules;
   onRulesChange: (update: RulesUpdate) => void;
   accountOptions: ReadonlyArray<AccountOption>;
   selectedAccountKey: string | null;
@@ -747,7 +755,7 @@ export function SidebarEnhancedFilterChips({
     selectedAccountKey === null
       ? null
       : (accountOptions.find((option) => option.key === selectedAccountKey)?.label ??
-        SIDEBAR_UNAVAILABLE_ACCOUNT_LABEL);
+        UNAVAILABLE_ACCOUNT_LABEL);
   const ruleChips = rules
     .map((rule, index) => ({ rule, number: index + 1 }))
     .filter(({ rule }) => rule.pattern.trim() !== "");
@@ -759,7 +767,7 @@ export function SidebarEnhancedFilterChips({
   return (
     <div className="flex flex-wrap items-center gap-1 px-2 pb-1.5" aria-label="Active filters">
       {statuses.map((status) => {
-        const option = sidebarStatusOption(status);
+        const option = threadFilterStatusOption(status);
         return (
           <span key={status} className={chipClass}>
             <button
@@ -767,7 +775,10 @@ export function SidebarEnhancedFilterChips({
               className={cn(chipButtonClass, "flex items-center gap-1")}
               onClick={onOpenFilter}
             >
-              <span aria-hidden className={cn("size-1.5 rounded-full", option.dotClass)} />
+              <span
+                aria-hidden
+                className={cn("size-1.5 rounded-full", SIDEBAR_STATUS_DOT_CLASS[option.value])}
+              />
               {option.label}
             </button>
             <button
@@ -824,7 +835,7 @@ export function SidebarEnhancedFilterChips({
         </span>
       ) : null}
       {shownRules.map(({ rule, number }) => {
-        const text = sidebarTitleRuleText(rule);
+        const text = threadTitleRuleText(rule);
         const invalid = compiled.errors.has(rule.id);
         return (
           <span
@@ -845,7 +856,7 @@ export function SidebarEnhancedFilterChips({
                     )}
                     onClick={() =>
                       onRulesChange((current) =>
-                        setSidebarTitleRuleEnabled(current, rule.id, !rule.enabled),
+                        setThreadTitleRuleEnabled(current, rule.id, !rule.enabled),
                       )
                     }
                   />
@@ -864,7 +875,7 @@ export function SidebarEnhancedFilterChips({
               type="button"
               aria-label={`Remove rule ${number}`}
               className="cursor-pointer px-1 py-0.5 hover:text-sidebar-foreground"
-              onClick={() => onRulesChange((current) => removeSidebarTitleRule(current, rule.id))}
+              onClick={() => onRulesChange((current) => removeThreadTitleRule(current, rule.id))}
             >
               <XIcon className="size-3" />
             </button>
