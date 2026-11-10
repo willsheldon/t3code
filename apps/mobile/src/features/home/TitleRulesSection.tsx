@@ -41,26 +41,41 @@ function RuleRow(props: {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // A pattern changed from outside (Reset, another screen) replaces the draft.
   const [seenPattern, setSeenPattern] = useState(rule.pattern);
-  if (seenPattern !== rule.pattern) {
-    setSeenPattern(rule.pattern);
-    setDraft(rule.pattern);
-  }
-  const clearTimer = () => {
-    if (timer.current !== null) clearTimeout(timer.current);
-    timer.current = null;
-  };
   // The latest draft and change handler, so an unmount can still save a pattern typed just before it.
   const pending = useRef<{ draft: string; onChange: typeof props.onChange; ruleId: string } | null>(
     null,
   );
+  const clearTimer = () => {
+    if (timer.current !== null) clearTimeout(timer.current);
+    timer.current = null;
+    pending.current = null;
+  };
+  if (seenPattern !== rule.pattern) {
+    setSeenPattern(rule.pattern);
+    setDraft(rule.pattern);
+  }
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- an outside pattern edit cancels the pending save of older typed text.
+  useEffect(() => {
+    if (pending.current === null || pending.current.draft === rule.pattern) return;
+    if (timer.current !== null) clearTimeout(timer.current);
+    timer.current = null;
+    pending.current = null;
+  }, [rule.pattern]);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- saves an uncommitted draft when the row unmounts.
   useEffect(
     () => () => {
       if (timer.current === null) return;
       clearTimeout(timer.current);
       const last = pending.current;
+      pending.current = null;
       // A rule that Remove or Reset already dropped is ignored by setThreadTitleRulePattern.
-      if (last) last.onChange((rules) => setThreadTitleRulePattern(rules, last.ruleId, last.draft));
+      if (!last) return;
+      // Unchanged text saves nothing, so a tripped rule keeps its warning.
+      last.onChange((rules) =>
+        rules.find((entry) => entry.id === last.ruleId)?.pattern === last.draft
+          ? rules
+          : setThreadTitleRulePattern(rules, last.ruleId, last.draft),
+      );
     },
     [],
   );

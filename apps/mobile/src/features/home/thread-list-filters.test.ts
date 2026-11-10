@@ -237,7 +237,7 @@ describe("title rules in the list", () => {
     ).toEqual(["beta"]);
   });
 
-  it("writes the pass marker before matching and clears it after", () => {
+  it("writes the pass marker once and clears it after matching", () => {
     const store = memoryStore();
     const writes: string[] = [];
     const recording: ThreadFilterStore = {
