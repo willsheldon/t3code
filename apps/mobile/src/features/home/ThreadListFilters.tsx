@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { ListFilterMenu } from "../workspace/ListFilterMenu";
 import {
@@ -40,58 +40,61 @@ export function ThreadListFilters(
   const projectChip = chip("project");
   const statusChip = chip("status");
   const accountChip = chip("account");
-  // Status leads because it changes most. Reset sits outside the scroller so a
-  // wide selection can never push it off screen.
+  // Status leads because it changes most. The row wraps instead of scrolling,
+  // so every chip and the reset stay fully visible however long the labels get.
   return (
-    <View className="flex-row items-start" style={{ marginHorizontal: -props.gutter }}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 2, paddingBottom: 10, gap: 8 }}
-      >
-        {statusChip === null || enhanced === null ? null : (
-          <ListFilterMenu
-            label={statusFilterLabel(enhanced.statuses)}
-            title="Filter threads by status"
-            accessibilityLabel={labels.status ?? "Filter threads by status"}
-            active={enhanced.statuses.length > 0}
-            {...statusChip}
-          />
-        )}
-        {environmentChip === null ? null : (
-          <ListFilterMenu
-            label={selectedEnvironment?.label ?? "All environments"}
-            title="Filter threads by environment"
-            accessibilityLabel={labels.environment}
-            active={selectedEnvironment !== undefined}
-            {...environmentChip}
-          />
-        )}
-        {projectChip === null ? null : (
-          <ListFilterMenu
-            label={projectFilterLabel(filterState.projects, filterState.selectedProjectKeys)}
-            title="Filter threads by project"
-            accessibilityLabel={labels.project}
-            active={filterState.selectedProjectKeys.length > 0}
-            {...projectChip}
-          />
-        )}
-        {accountChip === null || enhanced === null ? null : (
-          <ListFilterMenu
-            label={accountFilterLabel(enhanced)}
-            title="Filter threads by account"
-            accessibilityLabel={labels.account ?? "Filter threads by account"}
-            active={enhanced.selectedAccountKey !== null}
-            {...accountChip}
-          />
-        )}
-      </ScrollView>
+    <View
+      className="flex-row flex-wrap items-center"
+      style={{
+        marginHorizontal: -props.gutter,
+        paddingHorizontal: 20,
+        paddingTop: 2,
+        paddingBottom: 10,
+        gap: 8,
+      }}
+    >
+      {statusChip === null || enhanced === null ? null : (
+        <ListFilterMenu
+          label={statusFilterLabel(enhanced.statuses)}
+          title="Filter threads by status"
+          accessibilityLabel={labels.status ?? "Filter threads by status"}
+          active={enhanced.statuses.length > 0}
+          {...statusChip}
+        />
+      )}
+      {environmentChip === null ? null : (
+        <ListFilterMenu
+          label={selectedEnvironment?.label ?? "All environments"}
+          title="Filter threads by environment"
+          accessibilityLabel={labels.environment}
+          active={selectedEnvironment !== undefined}
+          {...environmentChip}
+        />
+      )}
+      {projectChip === null ? null : (
+        <ListFilterMenu
+          label={projectFilterLabel(filterState.projects, filterState.selectedProjectKeys)}
+          title="Filter threads by project"
+          accessibilityLabel={labels.project}
+          active={filterState.selectedProjectKeys.length > 0}
+          {...projectChip}
+        />
+      )}
+      {accountChip === null || enhanced === null ? null : (
+        <ListFilterMenu
+          label={accountFilterLabel(enhanced)}
+          title="Filter threads by account"
+          accessibilityLabel={labels.account ?? "Filter threads by account"}
+          active={enhanced.selectedAccountKey !== null}
+          {...accountChip}
+        />
+      )}
       {isHomeListFilterCustomized(filterState) ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Reset thread filters"
-          className="mr-3 mt-0.5 h-8 w-8 items-center justify-center"
+          hitSlop={6}
+          className="h-8 w-8 items-center justify-center"
           onPress={filterControls.onReset}
         >
           <SymbolView name="xmark.circle.fill" size={18} tintColorClassName="accent-icon-muted" />

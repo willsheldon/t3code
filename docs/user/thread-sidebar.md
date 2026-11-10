@@ -267,13 +267,14 @@ The mobile app has the same status, account and project filters. They are native
 menus instead of a popover, and mobile has no title rules yet.
 
 - **Phone.** The row under the thread list's search holds a chip per filter,
-  in this order: **Status**, environment, project and **Account**. The **x**
-  reset stays at the right end of the row. On Android the same filters are in
-  the filter menu beside the search field. A chip shows the selection, such as
-  **Failed**, **2 statuses** or **3 projects**.
+  in this order: **Status**, environment, project and **Account**. The row
+  wraps onto a second line when the chips do not fit, and the **x** reset
+  follows the last chip. On Android the same filters are in the filter menu
+  beside the search field. A chip shows the selection, such as **Failed**, **2
+  statuses** or **3 projects**.
 - **Tablet.** The filter button in the sidebar header opens the same menus as
   submenus.
-- **Reset.** On iOS, the **x** at the end of the chip row clears every filter.
+- **Reset.** On iOS, the **x** after the last chip clears every filter.
   This includes iPad when the chip row is shown. The Android filter menu and the
   tablet filter button have a **Reset filters** entry. Both appear only while a
   filter is set.
