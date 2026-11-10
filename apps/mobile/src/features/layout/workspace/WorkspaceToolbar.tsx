@@ -79,6 +79,7 @@ export function WorkspaceToolbar(props: {
     enhanced: {
       statuses: listOptions.selectedStatuses,
       selectedAccountKey: listOptions.selectedAccountKey,
+      rules: listOptions.titleRules,
     },
   });
   // UIKit hosts integrated search outside the sidebar's sliding content.

@@ -2,9 +2,11 @@ import type { MenuAction } from "@react-native-menu/menu";
 import {
   THREAD_FILTER_STATUS_OPTIONS,
   UNAVAILABLE_ACCOUNT_LABEL,
+  compileThreadTitleRules,
   toggleThreadFilterStatus,
   type ThreadFilterStatus,
   type ThreadFilterStatusCounts,
+  type ThreadTitleRule,
 } from "@t3tools/client-runtime/state/thread-filters";
 import type { EnvironmentId } from "@t3tools/contracts";
 
@@ -31,6 +33,8 @@ export interface HomeListFilterMenuEnhanced {
   readonly doneHasMore: boolean;
   readonly accountOptions: ReadonlyArray<ThreadListAccountOption>;
   readonly selectedAccountKey: string | null;
+  /** All title rules, including those that are off or invalid; the sheet edits them. */
+  readonly rules: ReadonlyArray<ThreadTitleRule>;
 }
 
 export interface HomeListFilterMenuState {
@@ -54,18 +58,28 @@ export interface HomeListFilterMenuHandlers {
 /** The handlers plus the control that clears the filters the menus show. */
 export interface HomeListFilterControls extends HomeListFilterMenuHandlers {
   readonly onReset: () => void;
+  /** Takes an edit of the rules as they are when it runs. */
+  readonly onTitleRulesChange: (
+    edit: (rules: ReadonlyArray<ThreadTitleRule>) => ReadonlyArray<ThreadTitleRule>,
+  ) => void;
+  /** Opens the filter sheet, the one place that edits title rules; the menus offer it when set. */
+  readonly onOpenRules?: () => void;
 }
 
 /** What the active count needs; the header button has no account options or status counts. */
 export interface HomeListFilterSelection {
   readonly selectedEnvironmentId: EnvironmentId | null;
   readonly selectedProjectKeys: ReadonlyArray<string>;
-  readonly enhanced: Pick<HomeListFilterMenuEnhanced, "statuses" | "selectedAccountKey"> | null;
+  readonly enhanced: Pick<
+    HomeListFilterMenuEnhanced,
+    "statuses" | "selectedAccountKey" | "rules"
+  > | null;
 }
 
 /**
  * How many choices narrow the list: each status and each project counts, and so do the
- * environment and the account. Status and account count only while the enhanced filter is on.
+ * environment and the account. So does each live title rule. Status, account and rules count
+ * only while the enhanced filter is on.
  */
 export const homeListFilterActiveCount = (selection: HomeListFilterSelection): number =>
   (selection.selectedEnvironmentId === null ? 0 : 1) +
@@ -73,7 +87,8 @@ export const homeListFilterActiveCount = (selection: HomeListFilterSelection): n
   (selection.enhanced === null
     ? 0
     : selection.enhanced.statuses.length +
-      (selection.enhanced.selectedAccountKey === null ? 0 : 1));
+      (selection.enhanced.selectedAccountKey === null ? 0 : 1) +
+      compileThreadTitleRules(selection.enhanced.rules).liveCount);
 
 /** Whether any filter narrows the list, which the reset control and the filter icon show. */
 export const isHomeListFilterCustomized = (state: HomeListFilterSelection): boolean =>
@@ -96,6 +111,9 @@ export interface HomeListFilterMenuEntry {
 /** The id of the menu entry that clears every filter the menus show. */
 const HOME_LIST_FILTER_RESET_ID = "reset";
 const RESET_TITLE = "Reset filters";
+/** The menu entry that opens the filter sheet, where title rules are edited. */
+const HOME_LIST_FILTER_RULES_ID = "rules";
+const RULES_TITLE = "Title rules…";
 
 export interface HomeListFilterMenuSection {
   readonly id: "environment" | "project" | "status" | "account";
@@ -219,6 +237,7 @@ export function applyHomeListFilterAction(
 ): void {
   const { enhanced } = state;
   if (id === HOME_LIST_FILTER_RESET_ID) return handlers.onReset();
+  if (id === HOME_LIST_FILTER_RULES_ID) return handlers.onOpenRules?.();
   if (id === "environment:all") return handlers.onEnvironmentChange(null);
   if (id.startsWith("environment:")) {
     const environment = state.environments.find(
@@ -268,11 +287,13 @@ export function homeListFilterMenuActions(
 
 /**
  * The menus as nested actions, for the Android toolbar menu. `withReset` adds the entry that
- * clears every filter; pass whether any filter is set.
+ * clears every filter; pass whether any filter is set. `withRules` adds the entry that opens
+ * the title rules.
  */
 export function homeListFilterSubmenuActions(
   sections: ReadonlyArray<HomeListFilterMenuSection>,
   withReset = false,
+  withRules = false,
 ): MenuAction[] {
   return [
     ...sections.map((section) => ({
@@ -280,6 +301,7 @@ export function homeListFilterSubmenuActions(
       title: section.title,
       subactions: homeListFilterMenuActions(section.entries),
     })),
+    ...(withRules ? [{ id: HOME_LIST_FILTER_RULES_ID, title: RULES_TITLE }] : []),
     ...(withReset ? [{ id: HOME_LIST_FILTER_RESET_ID, title: RESET_TITLE }] : []),
   ];
 }
@@ -344,6 +366,9 @@ export function buildHomeListFilterMenu(
           onPress: () => applyHomeListFilterAction(entry.id, state, handlers),
         })),
       })),
+      ...(state.enhanced !== null && handlers.onOpenRules !== undefined
+        ? [{ type: "action" as const, title: RULES_TITLE, onPress: handlers.onOpenRules }]
+        : []),
       ...(isHomeListFilterCustomized(state)
         ? [{ type: "action" as const, title: RESET_TITLE, onPress: handlers.onReset }]
         : []),

@@ -1,3 +1,7 @@
+import {
+  newThreadTitleRule,
+  type ThreadTitleRule as TitleRule,
+} from "@t3tools/client-runtime/state/thread-filters";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { act, useLayoutEffect, type ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
@@ -10,6 +14,16 @@ vi.mock("@effect/atom-react", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@effect/atom-react")>()),
   useAtomSet: () => (value: unknown) => harness.saved.push(value),
 }));
+
+const guard = vi.hoisted(() => ({ items: new Map<string, string>() }));
+vi.mock("./thread-filter-guard-store", () => ({
+  threadFilterGuardStore: {
+    getItem: (key: string) => guard.items.get(key) ?? null,
+    setItem: (key: string, value: string) => void guard.items.set(key, value),
+    removeItem: (key: string) => void guard.items.delete(key),
+  },
+}));
+vi.mock("expo-crypto", () => ({ randomUUID: () => "uuid" }));
 
 import { HomeListOptionsProvider, useHomeListOptions } from "./home-list-options";
 
@@ -46,6 +60,7 @@ it("saves the scope from every update made in one event", async () => {
       projectKeys: ["env-1:project-1"],
       statuses: [],
       accountKey: null,
+      rules: [],
     },
   });
   expect(controls!.options.selectedEnvironmentId).toBe(ENVIRONMENT);
@@ -82,6 +97,7 @@ const SAVED = {
   projectKeys: ["a", "b"],
   statuses: ["working" as const],
   accountKey: '["env-1","codex"]',
+  rules: [] as ReadonlyArray<TitleRule>,
 };
 
 it("starts from the saved status, account and projects, and saves each change", async () => {
@@ -107,7 +123,15 @@ it("reset clears every filter in one save", async () => {
   const { current, unmount } = await mountOptions({ savedFilters: SAVED });
   act(() => current.controls!.resetFilters());
   expect(harness.saved).toEqual([
-    { threadListFilters: { environmentId: null, projectKeys: [], statuses: [], accountKey: null } },
+    {
+      threadListFilters: {
+        environmentId: null,
+        projectKeys: [],
+        statuses: [],
+        accountKey: null,
+        rules: [],
+      },
+    },
   ]);
   expect(current.controls!.options.selectedProjectKeys).toEqual([]);
   unmount();
@@ -143,8 +167,53 @@ it("reset while the enhanced filter is off clears only the environment and proje
         projectKeys: [],
         statuses: ["working"],
         accountKey: '["env-1","codex"]',
+        rules: [],
       },
     },
   ]);
+  unmount();
+});
+
+const RULE: TitleRule = { ...newThreadTitleRule("rule-1"), pattern: "wip" };
+
+it("saves title rules with the other filters and reset clears them", async () => {
+  const { current, unmount } = await mountOptions({ savedFilters: { ...SAVED, rules: [RULE] } });
+  expect(current.controls!.options.titleRules).toEqual([RULE]);
+  const hidden = { ...RULE, mode: "only" as const };
+  act(() => current.controls!.setTitleRules(() => [hidden]));
+  expect(harness.saved.at(-1)).toEqual({ threadListFilters: { ...SAVED, rules: [hidden] } });
+  act(() => current.controls!.resetFilters());
+  expect(harness.saved.at(-1)).toMatchObject({ threadListFilters: { rules: [] } });
+  expect(current.controls!.options.titleRules).toEqual([]);
+  unmount();
+});
+
+it("applies no title rule while the enhanced filter is off, and keeps them saved", async () => {
+  const { current, unmount } = await mountOptions({
+    enhancedFilterEnabled: false,
+    savedFilters: { ...SAVED, rules: [RULE] },
+  });
+  expect(current.controls!.options.titleRules).toEqual([]);
+  act(() => current.controls!.resetFilters());
+  expect(harness.saved.at(-1)).toMatchObject({ threadListFilters: { rules: [RULE] } });
+  unmount();
+});
+
+it("turns off a regex rule whose pass never finished, and saves that", async () => {
+  const regex: TitleRule = { ...newThreadTitleRule("rule-2"), pattern: "(a+)+$", regex: true };
+  guard.items.set(
+    "t3code:sidebar:enhanced-filter:pass",
+    JSON.stringify({ fingerprint: JSON.stringify([["rule-2", "(a+)+$"]]), at: 0 }),
+  );
+  const { current, unmount } = await mountOptions({ savedFilters: { ...SAVED, rules: [regex] } });
+  expect(current.controls!.options.titleRules).toEqual([
+    { ...regex, enabled: false, tripped: true },
+  ]);
+  expect(harness.saved).toEqual([
+    {
+      threadListFilters: { ...SAVED, rules: [{ ...regex, enabled: false, tripped: true }] },
+    },
+  ]);
+  expect(guard.items.size).toBe(0);
   unmount();
 });

@@ -48,12 +48,16 @@ export function HomeRouteScreen() {
     listOptions,
     selectedEnvironmentId,
     filterState,
-    filterControls,
+    filterControls: baseFilterControls,
   } = useThreadListFilterModel({
     visible,
     menus: Platform.OS !== "ios" && !showsSplitDetailOnly,
   });
   const navigation = useNavigation();
+  const filterControls = {
+    ...baseFilterControls,
+    onOpenRules: () => navigation.navigate("HomeFilters"),
+  };
   const selectTab = useSelectWorkspaceTab();
   const workspace = useWorkspaceTabs();
   const [localSearchQuery, setLocalSearchQuery] = useState("");

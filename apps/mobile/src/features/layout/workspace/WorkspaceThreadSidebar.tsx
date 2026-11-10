@@ -59,6 +59,7 @@ export function WorkspaceThreadSidebar() {
       selectedThreadKey={selectedThread}
       onOpenSettings={() => openWorkspaceTab("settings")}
       onOpenEnvironmentSettings={() => openSettings(navigation, "SettingsEnvironments")}
+      onOpenFilterRules={() => navigation.navigate("HomeFilters")}
       onNewThreadInProject={(project: EnvironmentProject) =>
         selectThreadRoute({
           draft: {

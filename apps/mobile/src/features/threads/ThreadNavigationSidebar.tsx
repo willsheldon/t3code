@@ -47,6 +47,7 @@ import {
   isHomeListFilterCustomized,
 } from "../home/home-list-filter-menu";
 import { resolveProjectFilter, soleProjectScope } from "../home/thread-list-filters";
+import { threadFilterGuardStore } from "../home/thread-filter-guard-store";
 import { useEnhancedThreadFilterMenu } from "../home/use-thread-list-filter-menu";
 import { buildHomeProjectScopes } from "../home/homeThreadList";
 import { SwipeableScrollGateProvider, useSwipeableScrollGate } from "../home/thread-swipe-actions";
@@ -91,6 +92,8 @@ interface ThreadNavigationSidebarProps {
   readonly selectedThreadKey: string | null;
   readonly onOpenSettings: () => void;
   readonly onOpenEnvironmentSettings: () => void;
+  /** Opens the filter sheet, where title rules are edited. */
+  readonly onOpenFilterRules: () => void;
   readonly onNewThreadOnBranch: (thread: EnvironmentThreadShell) => void;
   readonly onNewThreadInProject: (project: EnvironmentProject) => void;
   readonly onOpenPendingTask: (pendingTask: PendingNewTask) => void;
@@ -164,6 +167,7 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
     setSelectedProjectKeys,
     setSelectedStatuses,
     setSelectedAccountKey,
+    setTitleRules,
     resetFilters,
   } = useHomeListOptions(availableEnvironmentIds);
   const searchEnvironmentIds =
@@ -228,6 +232,7 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
     projectRefs: projectFilter.projectRefs,
     statuses: options.selectedStatuses,
     accountKey: options.selectedAccountKey,
+    rules: options.titleRules,
   });
   const threadSearch = useThreadSearch(
     searchEnvironmentIds,
@@ -255,6 +260,7 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
     projectFilter.keys,
     options.selectedStatuses,
     options.selectedAccountKey,
+    options.titleRules,
     props.searchQuery.trim(),
   ]);
   const [lastSettledResetKey, setLastSettledResetKey] = useState(settledResetKey);
@@ -303,6 +309,8 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
     projectRefs: projectFilter.projectRefs,
     statuses: options.selectedStatuses,
     accountKey: options.selectedAccountKey,
+    titleRules: options.titleRules,
+    guardStore: threadFilterGuardStore,
     searchQuery: props.searchQuery,
     searchMatches: threadSearchMatchByKey,
     settlementEnvironmentIds,
@@ -355,7 +363,9 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
     onProjectsChange: setSelectedProjectKeys,
     onStatusesChange: setSelectedStatuses,
     onAccountChange: setSelectedAccountKey,
+    onTitleRulesChange: setTitleRules,
     onReset: resetFilters,
+    onOpenRules: props.onOpenFilterRules,
   };
 
   const handleSwipeableWillOpen = (methods: SwipeableMethods) => {

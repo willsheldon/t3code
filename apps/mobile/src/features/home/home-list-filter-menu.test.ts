@@ -1,3 +1,4 @@
+import { newThreadTitleRule } from "@t3tools/client-runtime/state/thread-filters";
 import { EnvironmentId } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 
@@ -31,6 +32,7 @@ const ENHANCED: HomeListFilterMenuEnhanced = {
     { key: '["env-b","claude"]', label: "Claude" },
   ],
   selectedAccountKey: null,
+  rules: [],
 };
 
 function state(overrides: Partial<HomeListFilterMenuState> = {}): HomeListFilterMenuState {
@@ -60,6 +62,8 @@ function handlers() {
     onStatusesChange: vi.fn(),
     onAccountChange: vi.fn(),
     onReset: vi.fn(),
+    onTitleRulesChange: vi.fn(),
+    onOpenRules: vi.fn(),
   };
 }
 
@@ -442,6 +446,53 @@ describe("filter button", () => {
         enhanced: null,
       }),
     ).toBe(2);
+  });
+
+  it("counts each live title rule, and not one that is blank, off, tripped or invalid", () => {
+    const rule = (id: string, patch: Partial<ReturnType<typeof newThreadTitleRule>>) => ({
+      ...newThreadTitleRule(id),
+      pattern: "draft",
+      ...patch,
+    });
+    const rules = [
+      rule("live", {}),
+      rule("regex", { regex: true, pattern: "^fix" }),
+      rule("blank", { pattern: "  " }),
+      rule("off", { enabled: false }),
+      rule("tripped", { tripped: true }),
+      rule("invalid", { regex: true, pattern: "(" }),
+    ];
+    const withRules = state({ enhanced: { ...ENHANCED, rules } });
+    expect(homeListFilterActiveCount(withRules)).toBe(2);
+    expect(isHomeListFilterCustomized(withRules)).toBe(true);
+    expect(
+      isHomeListFilterCustomized(state({ enhanced: { ...ENHANCED, rules: rules.slice(2) } })),
+    ).toBe(false);
+  });
+
+  it("offers the title rules in the menus only when the sheet can be opened", () => {
+    const sections = buildHomeListFilterSections(state());
+    const ids = (actions: ReadonlyArray<{ readonly id?: string | undefined }>) =>
+      actions.map((action) => action.id);
+    expect(ids(homeListFilterSubmenuActions(sections, true, true)).slice(-2)).toEqual([
+      "rules",
+      "reset",
+    ]);
+    expect(ids(homeListFilterSubmenuActions(sections, true))).not.toContain("rules");
+
+    const open = handlers();
+    applyHomeListFilterAction("rules", state(), open);
+    expect(open.onOpenRules).toHaveBeenCalledOnce();
+    const titles = (menuHandlers: Parameters<typeof buildHomeListFilterMenu>[1]) =>
+      buildHomeListFilterMenu(state(), menuHandlers).items.map((item) => item.title);
+    expect(titles(handlers())).toContain("Title rules…");
+    const { onOpenRules: _omitted, ...withoutSheet } = handlers();
+    expect(titles(withoutSheet)).not.toContain("Title rules…");
+    expect(
+      buildHomeListFilterMenu(state({ enhanced: null }), handlers()).items.map(
+        (item) => item.title,
+      ),
+    ).not.toContain("Title rules…");
   });
 
   it("names the count in the accessibility label only when a filter is set", () => {

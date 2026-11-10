@@ -1,4 +1,8 @@
-import type { ThreadFilterStatus } from "@t3tools/client-runtime/state/thread-filters";
+import type {
+  ThreadFilterStatus,
+  ThreadFilterStore,
+  ThreadTitleRule,
+} from "@t3tools/client-runtime/state/thread-filters";
 import type { OlderSettledScope } from "@t3tools/client-runtime/state/threads";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { useMemo, useSyncExternalStore } from "react";
@@ -61,6 +65,10 @@ export function useThreadListV2(input: {
   /** The enhanced filter's selection, empty while it is off. The open thread always stays. */
   readonly statuses: ReadonlyArray<ThreadFilterStatus>;
   readonly accountKey: string | null;
+  /** Live title rules hide threads too; empty while the enhanced filter is off. */
+  readonly titleRules?: ReadonlyArray<ThreadTitleRule> | undefined;
+  /** Holds the title rules' hang guard marker; left out where matching cannot hang the app. */
+  readonly guardStore?: ThreadFilterStore | null | undefined;
   /** Threads that match the search by content, keyed like `threadSearchMatchKey`. */
   readonly searchMatches: ReadonlyMap<string, unknown>;
   readonly settlementEnvironmentIds: ReadonlySet<EnvironmentId>;
@@ -79,17 +87,29 @@ export function useThreadListV2(input: {
   readonly selectedThreadKey: string | null;
 }) {
   const { threads, workingShelfEnabled } = input;
-  const filtering = hasThreadListFilter({ statuses: input.statuses, accountKey: input.accountKey });
+  const filtering = hasThreadListFilter({
+    statuses: input.statuses,
+    accountKey: input.accountKey,
+    rules: input.titleRules,
+  });
   // The inbox tracker and move availability keep reading every thread: a filter hides rows,
   // it does not change what a thread is doing or where it can move.
   const listThreads = useMemo(
     () =>
       filterThreadsForList(
         threads,
-        { statuses: input.statuses, accountKey: input.accountKey },
+        { statuses: input.statuses, accountKey: input.accountKey, rules: input.titleRules },
         input.selectedThreadKey,
+        input.guardStore,
       ),
-    [threads, input.statuses, input.accountKey, input.selectedThreadKey],
+    [
+      threads,
+      input.statuses,
+      input.accountKey,
+      input.titleRules,
+      input.selectedThreadKey,
+      input.guardStore,
+    ],
   );
   const layoutTime = useMemo(
     () => threadListV2LayoutTime({ threads, now: input.now, searchQuery: input.searchQuery }),
