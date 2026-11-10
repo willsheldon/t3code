@@ -6,6 +6,7 @@ import {
   buildHomeListFilterMenu,
   buildHomeListFilterSheet,
   buildHomeListFilterSections,
+  filterHomeListProjectEntries,
   homeListFilterActiveCount,
   homeListFilterButtonLabel,
   homeListFilterChipAccessibilityLabels,
@@ -546,5 +547,22 @@ describe("filter sheet", () => {
     applyHomeListFilterAction("project:all", menu, actions);
     expect(actions.onStatusesChange).toHaveBeenCalledWith(["failed"]);
     expect(actions.onProjectsChange).toHaveBeenCalledWith([]);
+  });
+});
+
+describe("filterHomeListProjectEntries", () => {
+  const entries = [
+    { id: "project:all", title: "All projects", state: "on" as const },
+    { id: "project:a", title: "Alpha Service", state: "off" as const },
+    { id: "project:b", title: "Beta App", state: "off" as const },
+  ];
+
+  it("keeps every row, including All projects, for an empty query", () => {
+    expect(filterHomeListProjectEntries(entries, "  ")).toEqual(entries);
+  });
+
+  it("matches project names without case and drops All projects", () => {
+    expect(filterHomeListProjectEntries(entries, " beta ")).toEqual([entries[2]]);
+    expect(filterHomeListProjectEntries(entries, "all")).toEqual([]);
   });
 });

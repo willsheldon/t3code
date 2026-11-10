@@ -370,6 +370,24 @@ export interface HomeListFilterSheet {
   readonly account: ReadonlyArray<HomeListFilterMenuEntry> | null;
 }
 
+/** The sheet offers a project search once the list is longer than this. */
+export const HOME_LIST_PROJECT_SEARCH_THRESHOLD = 5;
+
+/**
+ * Narrows the sheet's project rows by name. "All projects" only shows with an empty query,
+ * so a search result is never mistaken for a match.
+ */
+export function filterHomeListProjectEntries(
+  entries: ReadonlyArray<HomeListFilterMenuEntry>,
+  query: string,
+): ReadonlyArray<HomeListFilterMenuEntry> {
+  const needle = query.trim().toLowerCase();
+  if (needle === "") return entries;
+  return entries.filter(
+    (entry) => entry.id !== "project:all" && entry.title.toLowerCase().includes(needle),
+  );
+}
+
 export function buildHomeListFilterSheet(state: HomeListFilterMenuState): HomeListFilterSheet {
   const { enhanced } = state;
   const sections = buildHomeListFilterSections(state);

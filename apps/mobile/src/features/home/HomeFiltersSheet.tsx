@@ -1,10 +1,12 @@
 import { useNavigation } from "@react-navigation/native";
-import { Pressable, ScrollView, View } from "react-native";
+import { useRef, useState } from "react";
+import { Pressable, ScrollView, type TextInputInstance, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
 import { ListSection } from "../../components/ui/ListSection";
+import { SearchField } from "../../components/ui/SearchField";
 import { SelectionRow } from "../../components/ui/SelectionRow";
 import { SheetHeader } from "../../components/ui/SheetHeader";
 import { Toolbar } from "../../components/ui/Toolbar";
@@ -12,6 +14,8 @@ import { cn } from "../../lib/cn";
 import {
   applyHomeListFilterAction,
   buildHomeListFilterSheet,
+  filterHomeListProjectEntries,
+  HOME_LIST_PROJECT_SEARCH_THRESHOLD,
   isHomeListFilterCustomized,
   type HomeListFilterMenuEntry,
   type HomeListFilterSheetStatus,
@@ -86,6 +90,42 @@ function EntryList(props: {
   ));
 }
 
+function ProjectsSection(props: {
+  readonly entries: ReadonlyArray<HomeListFilterMenuEntry>;
+  readonly onSelect: (id: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<TextInputInstance | null>(null);
+  // One entry is "All projects"; the rest are the projects themselves.
+  const searchable = props.entries.length - 1 > HOME_LIST_PROJECT_SEARCH_THRESHOLD;
+  const shown = searchable ? filterHomeListProjectEntries(props.entries, query) : props.entries;
+  return (
+    <View className="gap-2">
+      <Text textRole="footnote" className="px-2 font-t3-medium text-foreground-muted">
+        Projects
+      </Text>
+      {searchable ? (
+        <SearchField
+          inputRef={searchRef}
+          autoFocus={false}
+          accessibilityLabel="Search projects"
+          clearAccessibilityLabel="Clear project search"
+          placeholder="Search projects"
+          value={query}
+          onChangeText={setQuery}
+        />
+      ) : null}
+      <ListSection>
+        {shown.length === 0 ? (
+          <Text className="px-4 py-3 text-base text-foreground-muted">No matching projects.</Text>
+        ) : (
+          <EntryList entries={shown} role="checkbox" onSelect={props.onSelect} />
+        )}
+      </ListSection>
+    </View>
+  );
+}
+
 /**
  * The iOS thread filters, presented from the header's filter button in place of the chip row.
  * Choices apply at once to the list behind the sheet, through the same handlers the menus use.
@@ -144,9 +184,7 @@ export function HomeFiltersSheet() {
           </View>
         )}
         {sheet.projects === null ? null : (
-          <ListSection title="Projects">
-            <EntryList entries={sheet.projects} role="checkbox" onSelect={select} />
-          </ListSection>
+          <ProjectsSection entries={sheet.projects} onSelect={select} />
         )}
         <ListSection title="Environment">
           <EntryList entries={sheet.environment} role="radio" onSelect={select} />
