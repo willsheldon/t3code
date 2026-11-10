@@ -272,9 +272,10 @@ menus instead of a popover, and mobile has no title rules yet.
   selection, such as **Working, Failed** or **3 projects**.
 - **Tablet.** The filter button in the sidebar header opens the same menus as
   submenus.
-- **Reset.** The **x** at the end of the chip row clears every filter on iOS
-  phones. The Android filter menu and the tablet filter button have a **Reset
-  filters** entry instead. Both appear only while a filter is set.
+- **Reset.** On iOS, the **x** at the end of the chip row clears every filter.
+  This includes iPad when the chip row is shown. The Android filter menu and the
+  tablet filter button have a **Reset filters** entry. Both appear only while a
+  filter is set.
 - **Status** lists **Input**, **Working**, **Failed** and **Done** with how many
   threads each would show, such as **3 threads**. Done reads **40+ threads** while
   older settled threads are not loaded. **Clear status** appears once one is

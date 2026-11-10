@@ -73,7 +73,7 @@ export interface HomeListFilterMenuEntry {
 }
 
 /** The id of the menu entry that clears every filter the menus show. */
-export const HOME_LIST_FILTER_RESET_ID = "reset";
+const HOME_LIST_FILTER_RESET_ID = "reset";
 const RESET_TITLE = "Reset filters";
 
 export interface HomeListFilterMenuSection {
