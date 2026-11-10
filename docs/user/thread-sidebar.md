@@ -266,11 +266,11 @@ Your rules are kept and come back when you turn it on again.
 The mobile app has the same status, account and project filters. They are native
 menus instead of a popover, and mobile has no title rules yet.
 
-- **Phone.** The row under the thread list's search holds a chip per filter, in
-  this order: **Status**, environment, project and **Account**. The **x** reset
-  stays at the right end of the row. On Android the
-  same filters are in the filter menu beside the search field. A chip shows the
-  selection, such as **Failed**, **2 statuses** or **3 projects**.
+- **Phone.** The row under the thread list's search holds a chip per filter,
+  in this order: **Status**, environment, project and **Account**. The **x**
+  reset stays at the right end of the row. On Android the same filters are in
+  the filter menu beside the search field. A chip shows the selection, such as
+  **Failed**, **2 statuses** or **3 projects**.
 - **Tablet.** The filter button in the sidebar header opens the same menus as
   submenus.
 - **Reset.** On iOS, the **x** at the end of the chip row clears every filter.
