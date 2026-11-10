@@ -39,6 +39,7 @@ import { PullRequestReviewSheet } from "./features/pull-requests/PullRequestRevi
 import { PullRequestReviewersScreen } from "./features/pull-requests/PullRequestReviewersScreen";
 import { PullRequestLabelsScreen } from "./features/pull-requests/PullRequestLabelsScreen";
 import { PullRequestEditScreen } from "./features/pull-requests/PullRequestEditScreen";
+import { HomeFiltersSheet } from "./features/home/HomeFiltersSheet";
 import { PullRequestFilterSearchScreen } from "./features/pull-requests/PullRequestFilterSearchScreen";
 import {
   RenderErrorBoundary,
@@ -621,6 +622,16 @@ const RootStackConfig = createWorkspaceStackNavigator({
         contentStyle: { backgroundColor: "transparent" },
         headerBackVisible: false,
         ...getCompactBrandHeaderOptions(),
+      },
+    }),
+    HomeFilters: createNativeStackScreen({
+      screen: HomeFiltersSheet,
+      // iOS only: the header's filter button opens it in place of the chip row.
+      options: {
+        ...(Platform.OS === "ios" ? SHEET_GLASS_HEADER_OPTIONS : undefined),
+        ...HORIZONTAL_FORM_SHEET_OPTIONS,
+        sheetAllowedDetents: formSheetDetents(0.5),
+        sheetGrabberVisible: true,
       },
     }),
     PullRequest: createNativeStackScreen({

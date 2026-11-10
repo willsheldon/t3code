@@ -5,7 +5,10 @@ import {
   accountFilterLabel,
   applyHomeListFilterAction,
   buildHomeListFilterMenu,
+  buildHomeListFilterSheet,
   buildHomeListFilterSections,
+  homeListFilterActiveCount,
+  homeListFilterButtonLabel,
   homeListFilterChipAccessibilityLabels,
   homeListFilterMenuActions,
   homeListFilterSubmenuActions,
@@ -450,5 +453,137 @@ describe("menu shapes", () => {
     ).toBe(true);
     // Saved status and account choices do nothing while the enhanced filter is off.
     expect(isHomeListFilterCustomized(state({ enhanced: null }))).toBe(false);
+  });
+});
+
+describe("filter button", () => {
+  it("counts each status, each project, the environment and the account", () => {
+    expect(homeListFilterActiveCount(state())).toBe(0);
+    expect(homeListFilterActiveCount(state({ selectedEnvironmentId: ENV_A }))).toBe(1);
+    expect(
+      homeListFilterActiveCount(
+        state({
+          selectedEnvironmentId: ENV_B,
+          selectedProjectKeys: ["alpha", "beta"],
+          enhanced: { ...ENHANCED, statuses: ["failed"], selectedAccountKey: "x" },
+        }),
+      ),
+    ).toBe(5);
+  });
+
+  it("ignores status and account while the enhanced filter is off", () => {
+    expect(
+      homeListFilterActiveCount({
+        selectedEnvironmentId: ENV_A,
+        selectedProjectKeys: ["alpha"],
+        enhanced: null,
+      }),
+    ).toBe(2);
+  });
+
+  it("names the count in the accessibility label only when a filter is set", () => {
+    expect(homeListFilterButtonLabel(0)).toBe("Filters");
+    expect(homeListFilterButtonLabel(1)).toBe("Filters, 1 active");
+    expect(homeListFilterButtonLabel(3)).toBe("Filters, 3 active");
+  });
+});
+
+describe("filter sheet", () => {
+  it("shows a count and the selection on each of the four statuses", () => {
+    const sheet = buildHomeListFilterSheet(
+      state({ enhanced: { ...ENHANCED, statuses: ["working"] } }),
+    );
+    expect(sheet.status).toEqual([
+      {
+        id: "status:input",
+        label: "Input",
+        count: "1",
+        countSubtitle: "1 thread",
+        selected: false,
+      },
+      {
+        id: "status:working",
+        label: "Working",
+        count: "3",
+        countSubtitle: "3 threads",
+        selected: true,
+      },
+      {
+        id: "status:failed",
+        label: "Failed",
+        count: "0",
+        countSubtitle: "0 threads",
+        selected: false,
+      },
+      {
+        id: "status:done",
+        label: "Done",
+        count: "40",
+        countSubtitle: "40 threads",
+        selected: false,
+      },
+    ]);
+  });
+
+  it("marks the Done count with a plus while older settled threads are not loaded", () => {
+    const done = buildHomeListFilterSheet(
+      state({ enhanced: { ...ENHANCED, doneHasMore: true } }),
+    ).status?.find((status) => status.id === "status:done");
+    expect(done).toMatchObject({ count: "40+", countSubtitle: "40+ threads" });
+  });
+
+  it("leaves the counts out until they are known", () => {
+    const sheet = buildHomeListFilterSheet(
+      state({ enhanced: { ...ENHANCED, statusCounts: null } }),
+    );
+    expect(sheet.status?.every((status) => status.count === null)).toBe(true);
+  });
+
+  it("offers no status section while the enhanced filter is off", () => {
+    expect(buildHomeListFilterSheet(state({ enhanced: null })).status).toBeNull();
+  });
+
+  it("lists projects with All projects first and environments with All environments first", () => {
+    const sheet = buildHomeListFilterSheet(
+      state({ selectedProjectKeys: ["beta"], selectedEnvironmentId: ENV_B }),
+    );
+    expect(sheet.projects?.map((entry) => [entry.id, entry.state])).toEqual([
+      ["project:all", "off"],
+      ["project:alpha", "off"],
+      ["project:beta", "on"],
+    ]);
+    expect(sheet.environment.map((entry) => [entry.id, entry.state])).toEqual([
+      ["environment:all", "off"],
+      [`environment:${ENV_A}`, "off"],
+      [`environment:${ENV_B}`, "on"],
+    ]);
+  });
+
+  it("hides Projects when there are none", () => {
+    expect(buildHomeListFilterSheet(state({ projects: [] })).projects).toBeNull();
+  });
+
+  it("shows Account only with several accounts or one selected", () => {
+    expect(buildHomeListFilterSheet(state()).account?.map((entry) => entry.id)).toEqual([
+      "account:all",
+      'account:["env-a","codex"]',
+      'account:["env-b","claude"]',
+    ]);
+    const single = { ...ENHANCED, accountOptions: ENHANCED.accountOptions.slice(0, 1) };
+    expect(buildHomeListFilterSheet(state({ enhanced: single })).account).toBeNull();
+    expect(
+      buildHomeListFilterSheet(
+        state({ enhanced: { ...single, selectedAccountKey: single.accountOptions[0]!.key } }),
+      ).account,
+    ).not.toBeNull();
+  });
+
+  it("uses ids the menu action handler takes", () => {
+    const actions = handlers();
+    const menu = state();
+    applyHomeListFilterAction("status:failed", menu, actions);
+    applyHomeListFilterAction("project:all", menu, actions);
+    expect(actions.onStatusesChange).toHaveBeenCalledWith(["failed"]);
+    expect(actions.onProjectsChange).toHaveBeenCalledWith([]);
   });
 });

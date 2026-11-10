@@ -2,17 +2,19 @@ import { Pressable, View } from "react-native";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { ListFilterMenu } from "../workspace/ListFilterMenu";
 import {
-  accountFilterLabel,
   applyHomeListFilterAction,
   buildHomeListFilterSections,
   homeListFilterChipAccessibilityLabels,
   homeListFilterMenuActions,
   isHomeListFilterCustomized,
   projectFilterLabel,
-  statusFilterLabel,
 } from "./home-list-filter-menu";
 import type { HomeHeaderProps } from "./HomeHeader.types";
 
+/**
+ * The chip row under the search field while the enhanced filter is off: the environment and
+ * project chips and the reset. With it on, the header's filter button opens the filter sheet.
+ */
 export function ThreadListFilters(
   props: Pick<HomeHeaderProps, "filterState" | "filterControls"> & {
     /** List padding the scroller bleeds through so pills start where row content does. */
@@ -20,13 +22,12 @@ export function ThreadListFilters(
   },
 ) {
   const { filterState, filterControls } = props;
-  const { enhanced } = filterState;
   const selectedEnvironment = filterState.environments.find(
     (environment) => environment.environmentId === filterState.selectedEnvironmentId,
   );
   const sections = buildHomeListFilterSections(filterState);
   const labels = homeListFilterChipAccessibilityLabels(filterState);
-  const chip = (id: "environment" | "project" | "status" | "account") => {
+  const chip = (id: "environment" | "project") => {
     const section = sections.find((candidate) => candidate.id === id);
     return section === undefined
       ? null
@@ -38,10 +39,8 @@ export function ThreadListFilters(
   };
   const environmentChip = chip("environment");
   const projectChip = chip("project");
-  const statusChip = chip("status");
-  const accountChip = chip("account");
-  // Status leads because it changes most. The row wraps instead of scrolling,
-  // so every chip and the reset stay fully visible however long the labels get.
+  // The row wraps instead of scrolling, so both chips and the reset stay fully visible
+  // however long the labels get.
   return (
     <View
       className="flex-row flex-wrap items-center"
@@ -53,15 +52,6 @@ export function ThreadListFilters(
         gap: 8,
       }}
     >
-      {statusChip === null || enhanced === null ? null : (
-        <ListFilterMenu
-          label={statusFilterLabel(enhanced.statuses)}
-          title="Filter threads by status"
-          accessibilityLabel={labels.status ?? "Filter threads by status"}
-          active={enhanced.statuses.length > 0}
-          {...statusChip}
-        />
-      )}
       {environmentChip === null ? null : (
         <ListFilterMenu
           label={selectedEnvironment?.label ?? "All environments"}
@@ -78,15 +68,6 @@ export function ThreadListFilters(
           accessibilityLabel={labels.project}
           active={filterState.selectedProjectKeys.length > 0}
           {...projectChip}
-        />
-      )}
-      {accountChip === null || enhanced === null ? null : (
-        <ListFilterMenu
-          label={accountFilterLabel(enhanced)}
-          title="Filter threads by account"
-          accessibilityLabel={labels.account ?? "Filter threads by account"}
-          active={enhanced.selectedAccountKey !== null}
-          {...accountChip}
         />
       )}
       {isHomeListFilterCustomized(filterState) ? (

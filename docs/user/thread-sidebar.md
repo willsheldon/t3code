@@ -263,31 +263,35 @@ Your rules are kept and come back when you turn it on again.
 
 ### Filter on mobile
 
-The mobile app has the same status, account and project filters. They are native
-menus instead of a popover, and mobile has no title rules yet.
+The mobile app has the same status, account and project filters. They are a
+native sheet or menus instead of a popover, and mobile has no title rules yet.
 
-- **Phone.** The row under the thread list's search holds a chip per filter,
-  in this order: **Status**, environment, project and **Account**. The row
-  wraps onto a second line when the chips do not fit, and the **x** reset
-  follows the last chip. On Android the same filters are in the filter menu
-  beside the search field. A chip shows the selection, such as **Failed**, **2
-  statuses** or **3 projects**.
-- **Tablet.** The filter button in the sidebar header opens the same menus as
-  submenus.
-- **Reset.** On iOS, the **x** after the last chip clears every filter.
-  This includes iPad when the chip row is shown. The Android filter menu and the
-  tablet filter button have a **Reset filters** entry. Both appear only while a
-  filter is set.
-- **Status** lists **Input**, **Working**, **Failed** and **Done** with how many
-  threads each would show, such as **3 threads**. Done reads **40+ threads** while
-  older settled threads are not loaded. **Clear status** appears once one is
-  selected.
+- **iPhone and iPad.** The **Filters** button beside Search in the thread list's
+  header opens a sheet with every filter, so no chip row takes room under the
+  search field. The button fills in while a filter is set, and shows how many
+  choices are set on iOS 26 and later. Each status, each project, the
+  environment and the account count as one. VoiceOver reads it as **Filters, 3
+  active**. Changes apply at once to the list behind the sheet. The sheet opens
+  at half height; drag it up for more room. Tap the close button when finished.
+- **Android.** The filter menu beside the search field holds the same filters
+  as submenus.
+- **Tablet sidebar.** The filter button in the sidebar header opens the same
+  menus as submenus.
+- **Reset.** **Reset** in the sheet header clears every filter. It is available
+  only while a filter is set. The Android filter menu and the tablet filter
+  button have a **Reset filters** entry that appears the same way.
+- **Status** shows **Input**, **Working**, **Failed** and **Done** as four
+  buttons, with how many threads each would show. Tap any number of them. A
+  selected status has a checkmark and a filled button. Done reads **40+** while
+  older settled threads are not loaded. In the Android and tablet menus, a status
+  reads such as **3 threads**, and **Clear status** appears once one is selected.
 - **Projects.** Check any number of projects. **All projects** clears the choice.
   A project you saved before this filter existed stays selected.
+- **Environment.** Pick one environment, or **All environments**.
 - **Account** appears when you have more than one account, or one is selected.
 
-On iOS the menu stays open while you check several statuses or projects. On
-Android a menu closes after each tap, so open it again to add another.
+In the tablet sidebar's menus the menu stays open while you check several statuses
+or projects. On Android a menu closes after each tap, so open it again to add another.
 
 Search, the section counts, the empty message and the **Show more** row for older
 settled threads follow the filters. On a tablet the open thread stays visible. A
@@ -295,7 +299,9 @@ task that is still being created is hidden while a status or account filter is s
 because it has no status yet. The filters are remembered on this device.
 
 To turn the new filters off, use **Settings → General → Enhanced thread filter**.
-The environment menu and a single project choice stay, as they were. While it is
+On iPhone, the **Filters** button goes away and the row of environment and project
+chips under the search field comes back, with an **x** after the chips that clears
+them. The environment menu and a single project choice stay, as they were. While it is
 off, picking a project replaces the saved project list with that one project.
 **Reset** clears only the environment and project. When you turn the filter on
 again, your saved status and account come back. So do your saved projects, unless

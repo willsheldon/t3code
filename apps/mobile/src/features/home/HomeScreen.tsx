@@ -743,7 +743,8 @@ export function HomeScreen(props: HomeScreenProps) {
   const v2ListHeader = (
     <>
       {listHeader}
-      {Platform.OS === "ios" && workspace ? (
+      {/* With the enhanced filter on, the header's filter button opens the filters instead. */}
+      {Platform.OS === "ios" && workspace && filterState.enhanced === null ? (
         <ThreadListFilters
           gutter={primaryColumn ? 8 : 0}
           filterState={filterState}

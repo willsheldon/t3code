@@ -55,12 +55,32 @@ export interface HomeListFilterControls extends HomeListFilterMenuHandlers {
   readonly onReset: () => void;
 }
 
+/** What the active count needs; the header button has no account options or status counts. */
+export interface HomeListFilterSelection {
+  readonly selectedEnvironmentId: EnvironmentId | null;
+  readonly selectedProjectKeys: ReadonlyArray<string>;
+  readonly enhanced: Pick<HomeListFilterMenuEnhanced, "statuses" | "selectedAccountKey"> | null;
+}
+
+/**
+ * How many choices narrow the list: each status and each project counts, and so do the
+ * environment and the account. Status and account count only while the enhanced filter is on.
+ */
+export const homeListFilterActiveCount = (selection: HomeListFilterSelection): number =>
+  (selection.selectedEnvironmentId === null ? 0 : 1) +
+  selection.selectedProjectKeys.length +
+  (selection.enhanced === null
+    ? 0
+    : selection.enhanced.statuses.length +
+      (selection.enhanced.selectedAccountKey === null ? 0 : 1));
+
 /** Whether any filter narrows the list, which the reset control and the filter icon show. */
-export const isHomeListFilterCustomized = (state: HomeListFilterMenuState): boolean =>
-  state.selectedEnvironmentId !== null ||
-  state.selectedProjectKeys.length > 0 ||
-  (state.enhanced !== null &&
-    (state.enhanced.statuses.length > 0 || state.enhanced.selectedAccountKey !== null));
+export const isHomeListFilterCustomized = (state: HomeListFilterSelection): boolean =>
+  homeListFilterActiveCount(state) > 0;
+
+/** The header filter button's accessibility label, naming how many choices are set. */
+export const homeListFilterButtonLabel = (activeCount: number): string =>
+  activeCount > 0 ? `Filters, ${activeCount} active` : "Filters";
 
 export interface HomeListFilterMenuEntry {
   /** Prefixed by its menu: `environment:`, `project:`, `status:` or `account:`. */
@@ -84,8 +104,11 @@ export interface HomeListFilterMenuSection {
 
 const onOff = (on: boolean) => (on ? ("on" as const) : ("off" as const));
 
+/** A status count as a number, with a `+` when older settled threads are not loaded. */
+const countText = (count: number, more: boolean): string => `${count}${more ? "+" : ""}`;
+
 function countSubtitle(count: number, more: boolean): string {
-  return `${count}${more ? "+" : ""} ${count === 1 && !more ? "thread" : "threads"}`;
+  return `${countText(count, more)} ${count === 1 && !more ? "thread" : "threads"}`;
 }
 
 /** The menus in the order the chips and the submenus list them. */
@@ -360,5 +383,52 @@ export function buildHomeListFilterMenu(
         ? [{ type: "action" as const, title: RESET_TITLE, onPress: handlers.onReset }]
         : []),
     ],
+  };
+}
+
+export interface HomeListFilterSheetStatus {
+  readonly id: string;
+  readonly label: string;
+  /** Null until counted. */
+  readonly count: string | null;
+  readonly countSubtitle: string | null;
+  readonly selected: boolean;
+}
+
+/**
+ * What the iOS filter sheet shows, top to bottom: a section is null when it is not offered
+ * (status while the enhanced filter is off, projects when there are none, account with one
+ * account and none selected). Entries keep the ids `applyHomeListFilterAction` takes.
+ */
+export interface HomeListFilterSheet {
+  readonly status: ReadonlyArray<HomeListFilterSheetStatus> | null;
+  readonly projects: ReadonlyArray<HomeListFilterMenuEntry> | null;
+  readonly environment: ReadonlyArray<HomeListFilterMenuEntry>;
+  readonly account: ReadonlyArray<HomeListFilterMenuEntry> | null;
+}
+
+export function buildHomeListFilterSheet(state: HomeListFilterMenuState): HomeListFilterSheet {
+  const { enhanced } = state;
+  const sections = buildHomeListFilterSections(state);
+  const entriesOf = (id: HomeListFilterMenuSection["id"]) =>
+    sections.find((section) => section.id === id)?.entries ?? null;
+  return {
+    status:
+      enhanced === null
+        ? null
+        : THREAD_FILTER_STATUS_OPTIONS.map((option) => {
+            const count = enhanced.statusCounts?.[option.value];
+            const more = option.value === "done" && enhanced.doneHasMore;
+            return {
+              id: `status:${option.value}`,
+              label: option.label,
+              count: count === undefined ? null : countText(count, more),
+              countSubtitle: count === undefined ? null : countSubtitle(count, more),
+              selected: enhanced.statuses.includes(option.value),
+            };
+          }),
+    projects: entriesOf("project"),
+    environment: entriesOf("environment") ?? [],
+    account: entriesOf("account"),
   };
 }
