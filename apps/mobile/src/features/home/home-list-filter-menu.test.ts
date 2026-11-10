@@ -140,7 +140,7 @@ describe("status menu", () => {
   it("labels the chip", () => {
     expect(statusFilterLabel([])).toBe("Status");
     expect(statusFilterLabel(["failed"])).toBe("Failed");
-    expect(statusFilterLabel(["working", "failed"])).toBe("Working, Failed");
+    expect(statusFilterLabel(["working", "failed"])).toBe("2 statuses");
     expect(statusFilterLabel(["input", "working", "failed"])).toBe("3 statuses");
     expect(statusFilterLabel(["input", "working", "failed", "done"])).toBe("4 statuses");
   });

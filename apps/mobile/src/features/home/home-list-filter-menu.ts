@@ -260,11 +260,17 @@ export function homeListFilterSubmenuActions(
   ];
 }
 
-/** The label a chip or filter button shows for the selected statuses. */
+/**
+ * The label a chip or filter button shows for the selected statuses. More than
+ * one becomes a count, so the chip keeps its width and the row does not push
+ * later chips off screen; the accessibility label still names each one.
+ */
 export function statusFilterLabel(statuses: ReadonlyArray<ThreadFilterStatus>): string {
   if (statuses.length === 0) return "Status";
-  const joined = statuses.map((status) => threadFilterStatusOption(status).label).join(", ");
-  return joined.length > 18 ? `${statuses.length} statuses` : joined;
+  const [only] = statuses;
+  return statuses.length === 1 && only !== undefined
+    ? threadFilterStatusOption(only).label
+    : `${statuses.length} statuses`;
 }
 
 export function projectFilterLabel(
