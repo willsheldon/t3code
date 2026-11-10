@@ -141,8 +141,8 @@ import {
   deriveActiveWorkStartedAt,
   deriveCanInterruptRunningThread,
   findRevertCheckpoint,
-  isLatestRunSettled,
 } from "../session-logic";
+import { isLatestRunSettled } from "@t3tools/client-runtime/state/models";
 import { type LegendListRef } from "@legendapp/list/react";
 import { useWorkspaceMutationRefresh } from "../hooks/useWorkspaceMutationRefresh";
 import { DEFAULT_INTERACTION_MODE, type ChatMessage } from "../types";

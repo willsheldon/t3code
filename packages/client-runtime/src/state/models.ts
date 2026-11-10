@@ -115,6 +115,16 @@ export function threadRuntimeIsActive(runtime: ThreadStructureRuntime | null | u
   return runtime !== null && runtime !== undefined && threadRunStatusIsActive(runtime.status);
 }
 
+/** Whether the latest run is over and no longer the runtime's active run. */
+export function isLatestRunSettled(
+  latestRun: Pick<ThreadRunSummary, "runId" | "startedAt" | "completedAt" | "status"> | null,
+  runtime: Pick<ThreadRuntimeSummary, "status" | "activeRunId"> | null,
+): boolean {
+  if (latestRun === null) return false;
+  if (threadRunStatusIsActive(latestRun.status)) return false;
+  return runtime?.activeRunId !== latestRun.runId;
+}
+
 export function threadRuntimeCanArchive(runtime: ThreadRuntimeSummary | null | undefined): boolean {
   if (runtime?.status === "queued") return runtime.activeRunId === null;
   return (
