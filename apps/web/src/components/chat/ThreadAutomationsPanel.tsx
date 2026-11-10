@@ -35,6 +35,7 @@ const STATUS_DOT_CLASS: Record<ScheduledTask["lastRunStatus"], string> = {
   running: "bg-sky-500",
   succeeded: "bg-emerald-500",
   failed: "bg-destructive",
+  "skipped-pending": "bg-amber-500",
 };
 
 function taskScheduleLine(task: ScheduledTask) {

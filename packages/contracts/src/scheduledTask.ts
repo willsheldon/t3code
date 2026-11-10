@@ -214,7 +214,17 @@ export const ScheduledTaskUpsertSchedule = Schema.Union([
 ]);
 export type ScheduledTaskUpsertSchedule = typeof ScheduledTaskUpsertSchedule.Type;
 
-export const ScheduledTaskRunStatus = Schema.Literals(["never", "running", "succeeded", "failed"]);
+/**
+ * `skipped-pending`: the last firing was skipped because the bound thread already
+ * held a queued run from the same schedule.
+ */
+export const ScheduledTaskRunStatus = Schema.Literals([
+  "never",
+  "running",
+  "succeeded",
+  "failed",
+  "skipped-pending",
+]);
 export type ScheduledTaskRunStatus = typeof ScheduledTaskRunStatus.Type;
 
 export const ScheduledTaskWebhookEndpoint = Schema.Struct({

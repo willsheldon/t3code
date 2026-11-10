@@ -94,6 +94,10 @@ without the agent's context growing. To move a one-thread task, pick another
 thread in its project under **Destination**. Moving such a task to another
 project starts a new thread there on its next run.
 
+An interval task that posts into a busy thread queues at most one run. If its
+earlier run is still waiting when the next interval arrives, that interval is
+skipped and the task shows **skipped-pending**.
+
 Deleting a thread also deletes tasks that post into that thread. Tasks that start
 a new thread on each run survive deletion of their previous threads.
 
