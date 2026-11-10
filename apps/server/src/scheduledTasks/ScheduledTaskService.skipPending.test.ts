@@ -37,6 +37,7 @@ const harness = Effect.gen(function* () {
   const runs = yield* Ref.make<ReadonlyArray<FakeRun>>([]);
   const sends = yield* Ref.make(0);
   const due = yield* Ref.make<Effect.Effect<void>>(Effect.void);
+  const lookupFails = yield* Ref.make(false);
   const layer = ScheduledTaskService.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -58,7 +59,17 @@ const harness = Effect.gen(function* () {
               Effect.as({} as never),
             ),
           getProjectThreadRecords: ((_input: unknown, _fields: unknown, filter: any) =>
-            Ref.get(runs).pipe(
+            Ref.get(lookupFails).pipe(
+              Effect.flatMap((fails) =>
+                fails
+                  ? Effect.fail(
+                      new ThreadManagementService.ThreadManagementThreadNotFoundError({
+                        projectId: PROJECT,
+                        threadId: THREAD,
+                      }),
+                    )
+                  : Ref.get(runs),
+              ),
               Effect.map((all) => {
                 const matching = all.filter(
                   (run) =>
@@ -102,7 +113,7 @@ const harness = Effect.gen(function* () {
       ),
     ),
   );
-  return { runs, sends, due, layer };
+  return { runs, sends, due, lookupFails, layer };
 });
 
 const createTask = (everyMs = EVERY_MS) =>
@@ -217,6 +228,20 @@ it.effect("a manual run is not skipped by a pending scheduled run", () =>
       yield* fire(due);
       yield* service.runNow({ id: TASK });
       assert.equal(yield* Ref.get(sends), 2);
+    }).pipe(Effect.provide(layer));
+  }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
+);
+
+it.effect("a failed queue lookup still sends the firing", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(Date.parse("2026-11-10T00:00:00.000Z"));
+    const { sends, due, lookupFails, layer } = yield* harness;
+    yield* Ref.set(lookupFails, true);
+    yield* Effect.gen(function* () {
+      yield* createTask();
+      yield* fire(due);
+      assert.equal(yield* Ref.get(sends), 1);
+      assert.equal((yield* onlyTask).lastRunStatus, "succeeded");
     }).pipe(Effect.provide(layer));
   }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
 );
