@@ -51,7 +51,10 @@ export function HomeRouteScreen() {
     selectedEnvironmentId,
     filterState,
     filterControls,
-  } = useThreadListFilterModel({ visible, menus: !showsSplitDetailOnly });
+  } = useThreadListFilterModel({
+    visible,
+    menus: Platform.OS !== "ios" && !showsSplitDetailOnly,
+  });
   const navigation = useNavigation();
   const selectTab = useSelectWorkspaceTab();
   const workspace = useWorkspaceTabs();
@@ -206,9 +209,8 @@ export function HomeRouteScreen() {
           }}
           onStartNewTask={startNewTask}
           pendingTasks={pendingTasks}
-          projectGroupingMode={listOptions.projectGroupingMode}
+          listOptions={listOptions}
           projects={projects}
-          projectSortOrder={listOptions.projectSortOrder}
           savedConnectionsById={savedConnectionsById}
           searchQuery={searchQuery}
           selectedEnvironmentId={selectedEnvironmentId}

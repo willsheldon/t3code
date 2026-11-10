@@ -11,8 +11,7 @@ import {
 } from "@t3tools/client-runtime/state/shell";
 import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
-import type { ThreadFilterStatus } from "@t3tools/client-runtime/state/thread-filters";
-import { type EnvironmentId, type SidebarProjectGroupingMode } from "@t3tools/contracts";
+import { type EnvironmentId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { use, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import {
@@ -82,7 +81,8 @@ import type {
   HomeListFilterMenuEnvironment,
   HomeListFilterMenuState,
 } from "./home-list-filter-menu";
-import { buildHomeProjectScopes, type HomeProjectSortOrder } from "./homeThreadList";
+import { buildHomeProjectScopes } from "./homeThreadList";
+import type { ResolvedHomeListOptions } from "./home-list-options";
 import { resolveProjectFilter, soleProjectScope } from "./thread-list-filters";
 import { createSwipeRowActivation } from "./swipe-row-activation";
 import { SwipeableScrollGateProvider, useSwipeableScrollGate } from "./thread-swipe-actions";
@@ -103,8 +103,7 @@ interface HomeScreenProps {
   readonly selectedEnvironmentId: EnvironmentId | null;
   readonly filterState: HomeListFilterMenuState;
   readonly filterControls: HomeListFilterControls;
-  readonly projectSortOrder: HomeProjectSortOrder;
-  readonly projectGroupingMode: SidebarProjectGroupingMode;
+  readonly listOptions: ResolvedHomeListOptions;
   readonly onSearchQueryChange: (query: string) => void;
   readonly onAddConnection: () => void;
   readonly onOpenSettings: () => void;
@@ -137,7 +136,7 @@ interface HomeScreenProps {
   readonly onNewThreadInProject: (project: EnvironmentProject) => void;
 }
 
-const NO_FILTER_STATUSES: ReadonlyArray<ThreadFilterStatus> = [];
+const NO_FILTER_STATUSES: ResolvedHomeListOptions["selectedStatuses"] = [];
 const ESTIMATED_THREAD_LIST_V2_ROW_HEIGHT = 72;
 // Rows away from the viewport skip their swipe actions (see
 // swipe-row-activation), so render further ahead: a fast fling then reaches
@@ -364,7 +363,8 @@ export function HomeScreen(props: HomeScreenProps) {
     onScrollBeginDrag: handleScrollBeginDrag,
   });
 
-  const { projects, selectedEnvironmentId, projectGroupingMode } = props;
+  const { projects, selectedEnvironmentId, listOptions } = props;
+  const { projectGroupingMode } = listOptions;
   const projectScopes = useMemo(
     () =>
       buildHomeProjectScopes({
@@ -384,8 +384,13 @@ export function HomeScreen(props: HomeScreenProps) {
   })();
 
   const { filterState } = props;
-  const filterStatuses = filterState.enhanced?.statuses ?? NO_FILTER_STATUSES;
-  const filterAccountKey = filterState.enhanced?.selectedAccountKey ?? null;
+  // Saved status and account stay stored while the setting is off; only apply them when it is on.
+  const filterStatuses = listOptions.enhancedFilterEnabled
+    ? listOptions.selectedStatuses
+    : NO_FILTER_STATUSES;
+  const filterAccountKey = listOptions.enhancedFilterEnabled
+    ? listOptions.selectedAccountKey
+    : null;
   const filterKeys = filterState.selectedProjectKeys;
   // An archived project's filter reads as all projects, matching the filter menu.
   const projectFilter = useMemo(
@@ -744,7 +749,7 @@ export function HomeScreen(props: HomeScreenProps) {
     <>
       {listHeader}
       {/* With the enhanced filter on, the header's filter button opens the filters instead. */}
-      {Platform.OS === "ios" && workspace && filterState.enhanced === null ? (
+      {Platform.OS === "ios" && workspace && !listOptions.enhancedFilterEnabled ? (
         <ThreadListFilters
           gutter={primaryColumn ? 8 : 0}
           filterState={filterState}

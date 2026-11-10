@@ -2,7 +2,6 @@ import type { MenuAction } from "@react-native-menu/menu";
 import {
   THREAD_FILTER_STATUS_OPTIONS,
   UNAVAILABLE_ACCOUNT_LABEL,
-  threadFilterStatusOption,
   toggleThreadFilterStatus,
   type ThreadFilterStatus,
   type ThreadFilterStatusCounts,
@@ -283,19 +282,6 @@ export function homeListFilterSubmenuActions(
   ];
 }
 
-/**
- * The label a chip or filter button shows for the selected statuses. More than
- * one becomes a count, so the chip keeps its width and the row does not push
- * later chips off screen; the accessibility label still names each one.
- */
-export function statusFilterLabel(statuses: ReadonlyArray<ThreadFilterStatus>): string {
-  if (statuses.length === 0) return "Status";
-  const [only] = statuses;
-  return statuses.length === 1 && only !== undefined
-    ? threadFilterStatusOption(only).label
-    : `${statuses.length} statuses`;
-}
-
 export function projectFilterLabel(
   projects: ReadonlyArray<HomeListFilterMenuProject>,
   selectedKeys: ReadonlyArray<string>,
@@ -305,37 +291,14 @@ export function projectFilterLabel(
   return selected.length === 1 ? selected[0]!.label : `${selected.length} projects`;
 }
 
-export function accountFilterLabel(enhanced: HomeListFilterMenuEnhanced): string {
-  if (enhanced.selectedAccountKey === null) return "Account";
-  return (
-    enhanced.accountOptions.find((option) => option.key === enhanced.selectedAccountKey)?.label ??
-    UNAVAILABLE_ACCOUNT_LABEL
-  );
-}
-
 /** What a screen reader says for each chip: the filter and its current selection. */
 export function homeListFilterChipAccessibilityLabels(state: HomeListFilterMenuState) {
-  const { enhanced } = state;
   const environment =
     state.environments.find((candidate) => candidate.environmentId === state.selectedEnvironmentId)
       ?.label ?? "All environments";
   return {
     environment: `Filter threads by environment, ${environment}`,
     project: `Filter threads by project, ${projectFilterLabel(state.projects, state.selectedProjectKeys)}`,
-    status:
-      enhanced === null
-        ? null
-        : `Filter threads by status, ${
-            enhanced.statuses.length === 0
-              ? "All statuses"
-              : enhanced.statuses.map((status) => threadFilterStatusOption(status).label).join(", ")
-          }`,
-    account:
-      enhanced === null
-        ? null
-        : `Filter threads by account, ${
-            enhanced.selectedAccountKey === null ? "All accounts" : accountFilterLabel(enhanced)
-          }`,
   };
 }
 

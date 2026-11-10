@@ -2,7 +2,6 @@ import { EnvironmentId } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
-  accountFilterLabel,
   applyHomeListFilterAction,
   buildHomeListFilterMenu,
   buildHomeListFilterSheet,
@@ -14,7 +13,6 @@ import {
   homeListFilterSubmenuActions,
   isHomeListFilterCustomized,
   projectFilterLabel,
-  statusFilterLabel,
   type HomeListFilterMenuEnhanced,
   type HomeListFilterMenuState,
 } from "./home-list-filter-menu";
@@ -139,14 +137,6 @@ describe("status menu", () => {
     applyHomeListFilterAction("status:bogus", menu, actions);
     expect(actions.onStatusesChange).toHaveBeenCalledTimes(3);
   });
-
-  it("labels the chip", () => {
-    expect(statusFilterLabel([])).toBe("Status");
-    expect(statusFilterLabel(["failed"])).toBe("Failed");
-    expect(statusFilterLabel(["working", "failed"])).toBe("2 statuses");
-    expect(statusFilterLabel(["input", "working", "failed"])).toBe("3 statuses");
-    expect(statusFilterLabel(["input", "working", "failed", "done"])).toBe("4 statuses");
-  });
 });
 
 describe("account menu", () => {
@@ -180,11 +170,6 @@ describe("account menu", () => {
       "All accounts",
       "Unavailable account",
     ]);
-    expect(accountFilterLabel(missing.enhanced!)).toBe("Unavailable account");
-    expect(accountFilterLabel(ENHANCED)).toBe("Account");
-    expect(
-      accountFilterLabel({ ...ENHANCED, selectedAccountKey: ENHANCED.accountOptions[1]!.key }),
-    ).toBe("Claude");
   });
 
   it("selects an account, clears it, and ignores an account that is not offered", () => {
@@ -340,41 +325,17 @@ describe("chip accessibility labels", () => {
     expect(homeListFilterChipAccessibilityLabels(state())).toEqual({
       environment: "Filter threads by environment, All environments",
       project: "Filter threads by project, All projects",
-      status: "Filter threads by status, All statuses",
-      account: "Filter threads by account, All accounts",
     });
     expect(
       homeListFilterChipAccessibilityLabels(
         state({
           selectedEnvironmentId: ENV_B,
           selectedProjectKeys: ["alpha", "beta"],
-          enhanced: {
-            ...ENHANCED,
-            statuses: ["working", "failed"],
-            selectedAccountKey: ENHANCED.accountOptions[1]!.key,
-          },
         }),
       ),
     ).toEqual({
       environment: "Filter threads by environment, Server",
       project: "Filter threads by project, 2 projects",
-      status: "Filter threads by status, Working, Failed",
-      account: "Filter threads by account, Claude",
-    });
-  });
-
-  it("spell out every status even when the chip shortens them", () => {
-    expect(
-      homeListFilterChipAccessibilityLabels(
-        state({ enhanced: { ...ENHANCED, statuses: ["input", "working", "failed"] } }),
-      ).status,
-    ).toBe("Filter threads by status, Input, Working, Failed");
-  });
-
-  it("leave out status and account while the enhanced filter is off", () => {
-    expect(homeListFilterChipAccessibilityLabels(state({ enhanced: null }))).toMatchObject({
-      status: null,
-      account: null,
     });
   });
 });
