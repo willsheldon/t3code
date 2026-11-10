@@ -219,6 +219,25 @@ export function WorkingSectionSettings() {
   );
 }
 
+export function EnhancedFilterSettingsSection() {
+  const savePreferences = useAtomSet(updateMobilePreferencesAtom);
+  const preferences = useAtomValue(mobilePreferencesAtom);
+  const enhancedFilterEnabled =
+    AsyncResult.isSuccess(preferences) && preferences.value.enhancedThreadFilterEnabled !== false;
+
+  return (
+    <SettingsSection title="Thread filters">
+      <SettingsSwitchRow
+        icon="line.3.horizontal.decrease"
+        label="Enhanced thread filter"
+        subtitle="Filter threads by status, account, and several projects at once. Off keeps the environment and single project filters."
+        value={enhancedFilterEnabled}
+        onValueChange={(value) => savePreferences({ enhancedThreadFilterEnabled: value })}
+      />
+    </SettingsSection>
+  );
+}
+
 export function NewThreadSettingsSection() {
   const savePreferences = useAtomSet(updateMobilePreferencesAtom);
   const preferences = useAtomValue(mobilePreferencesAtom);

@@ -52,8 +52,12 @@ export function menuActionsFromAppBarItems(items: ReadonlyArray<AppBarMenuItem>)
             imageColor: item.iconColor,
             state: item.selected ? "on" : undefined,
             attributes:
-              item.disabled || item.destructive
-                ? { disabled: item.disabled, destructive: item.destructive }
+              item.disabled || item.destructive || item.keepsMenuPresented
+                ? {
+                    disabled: item.disabled,
+                    destructive: item.destructive,
+                    keepsMenuPresented: item.keepsMenuPresented,
+                  }
                 : undefined,
           },
         ],

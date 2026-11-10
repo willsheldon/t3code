@@ -64,6 +64,21 @@ describe("filterSettingsSections", () => {
     expect(visible(query)).toEqual(expected);
   });
 
+  it.each(["filter", "thread filter", "enhanced thread filter", "status", "account"])(
+    "finds the enhanced thread filter switch on General by %s",
+    (query) => {
+      const sections = [
+        { rows: [{ id: "SettingsAppearance", label: "Appearance" }] },
+        { rows: [{ id: "SettingsOrganization", label: "General" }] },
+      ];
+      expect(
+        filterSettingsSections(sections, query).flatMap((section) =>
+          section.rows.map((row) => row.label),
+        ),
+      ).toEqual(["General"]);
+    },
+  );
+
   it("drops sections that start empty", () => {
     expect(filterSettingsSections([{ rows: [] }, ...SECTIONS], "").length).toBe(SECTIONS.length);
   });

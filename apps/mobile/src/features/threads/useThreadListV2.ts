@@ -1,8 +1,15 @@
+import type { ThreadFilterStatus } from "@t3tools/client-runtime/state/thread-filters";
 import type { OlderSettledScope } from "@t3tools/client-runtime/state/threads";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { useMemo, useSyncExternalStore } from "react";
 
 import { scopedProjectKey } from "../../lib/scopedEntities";
+import {
+  filterThreadsForList,
+  hasThreadListFilter,
+  isThreadInListScope,
+  projectRefKeys,
+} from "../home/thread-list-filters";
 import { useOlderSettledShelf, useOlderSettledShelfGrowth } from "../../state/olderSettledShelf";
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
 import {
@@ -28,6 +35,8 @@ function useKeySet(newlineSeparatedKeys: string): ReadonlySet<string> {
 
 type LayoutInput = Parameters<typeof buildThreadListV2Items>[0];
 
+const NO_THREADS: LayoutInput["threads"] = [];
+
 /**
  * The React Compiler drops unread dependencies, so pass the expired-grace version through
  * this call to keep inbox updates tied to its subscription.
@@ -49,6 +58,9 @@ export function useThreadListV2(input: {
   readonly environmentId: EnvironmentId | null;
   readonly projectRefs: LayoutInput["projectRefs"];
   readonly searchQuery: string;
+  /** The enhanced filter's selection, empty while it is off. The open thread always stays. */
+  readonly statuses: ReadonlyArray<ThreadFilterStatus>;
+  readonly accountKey: string | null;
   /** Threads that match the search by content, keyed like `threadSearchMatchKey`. */
   readonly searchMatches: ReadonlyMap<string, unknown>;
   readonly settlementEnvironmentIds: ReadonlySet<EnvironmentId>;
@@ -67,6 +79,18 @@ export function useThreadListV2(input: {
   readonly selectedThreadKey: string | null;
 }) {
   const { threads, workingShelfEnabled } = input;
+  const filtering = hasThreadListFilter({ statuses: input.statuses, accountKey: input.accountKey });
+  // The inbox tracker and move availability keep reading every thread: a filter hides rows,
+  // it does not change what a thread is doing or where it can move.
+  const listThreads = useMemo(
+    () =>
+      filterThreadsForList(
+        threads,
+        { statuses: input.statuses, accountKey: input.accountKey },
+        input.selectedThreadKey,
+      ),
+    [threads, input.statuses, input.accountKey, input.selectedThreadKey],
+  );
   const layoutTime = useMemo(
     () => threadListV2LayoutTime({ threads, now: input.now, searchQuery: input.searchQuery }),
     [threads, input.now, input.searchQuery],
@@ -135,7 +159,7 @@ export function useThreadListV2(input: {
     () =>
       buildThreadListV2Items({
         pendingOrder: input.pendingOrder,
-        threads: threads.filter((thread) => thread.archivedAt === null),
+        threads: listThreads.filter((thread) => thread.archivedAt === null),
         environmentId: input.environmentId,
         projectRefs: input.projectRefs,
         searchQuery: input.searchQuery,
@@ -153,21 +177,16 @@ export function useThreadListV2(input: {
         settledShelfExpanded: input.settledShelfExpanded,
         selectedThreadKey: input.selectedThreadKey,
         isListedSettled: isListed,
-        unloadedSettledCount: unloadedCount(
-          threads.filter(
-            (thread) =>
-              thread.archivedAt === null &&
-              scopes.some(
-                (scope) =>
-                  scope.environmentId === thread.environmentId &&
-                  (scope.projectIds === null || scope.projectIds.includes(thread.projectId)),
-              ),
-          ),
-        ),
+        // Unloaded history has no status or account to match yet. While filtering it is left
+        // out of the count and reported through `hasUnloadedSettled`.
+        unloadedSettledCount: filtering ? 0 : unloadedSettled(threads, scopes, unloadedCount),
       }),
     [
       input.pendingOrder,
       threads,
+      listThreads,
+      filtering,
+      unloadedCount,
       input.environmentId,
       input.projectRefs,
       input.searchQuery,
@@ -185,11 +204,34 @@ export function useThreadListV2(input: {
       input.settledShelfExpanded,
       input.selectedThreadKey,
       isListed,
-      unloadedCount,
       scopes,
     ],
   );
-  useOlderSettledShelfGrowth(olderSettledShelf, layout.listedSettledThreads);
+  // A filter lists only matches, so growth would page without end; count the settled threads
+  // the shelf could list before the filter, as the web sidebar does.
+  const scannedSettledThreads = useMemo(
+    () =>
+      filtering
+        ? threads.filter(
+            (thread) =>
+              thread.settledOverride === "settled" &&
+              isThreadInListScope(thread, {
+                environmentId: input.environmentId,
+                projectKeys: projectRefKeys(input.projectRefs ?? null),
+              }) &&
+              isListed(thread),
+          )
+        : NO_THREADS,
+    [filtering, threads, input.environmentId, input.projectRefs, isListed],
+  );
+  useOlderSettledShelfGrowth(
+    olderSettledShelf,
+    filtering ? scannedSettledThreads : layout.listedSettledThreads,
+  );
+  const hasUnloadedSettled = useMemo(
+    () => filtering && unloadedSettled(threads, scopes, unloadedCount) > 0,
+    [filtering, threads, scopes, unloadedCount],
+  );
   const contentOnlyThreadKeys = useKeySet([...layout.contentOnlyThreadKeys].sort().join("\n"));
   const pendingTasks = useMemo(() => {
     const scopedProjectKeys =
@@ -199,6 +241,8 @@ export function useThreadListV2(input: {
             input.projectRefs.map((ref) => scopedProjectKey(ref.environmentId, ref.projectId)),
           );
     const searchQuery = input.searchQuery.trim().toLocaleLowerCase();
+    // A task still being created has no status or account to match.
+    if (filtering) return [];
     return input.pendingTasks.filter(
       (pendingTask) =>
         (input.environmentId === null || pendingTask.environmentId === input.environmentId) &&
@@ -208,7 +252,7 @@ export function useThreadListV2(input: {
           )) &&
         (searchQuery.length === 0 || pendingTask.title.toLocaleLowerCase().includes(searchQuery)),
     );
-  }, [input.projectRefs, input.searchQuery, input.pendingTasks, input.environmentId]);
+  }, [input.projectRefs, input.searchQuery, input.pendingTasks, input.environmentId, filtering]);
   const items = useMemo(
     () =>
       buildThreadListV2ListItems({
@@ -242,11 +286,39 @@ export function useThreadListV2(input: {
       input.shelfPreferencesLoaded,
     ],
   );
-  return { layout, items, contentOnlyThreadKeys, olderSettledShelf };
+  return {
+    layout,
+    items,
+    contentOnlyThreadKeys,
+    olderSettledShelf,
+    filtering,
+    // Older settled threads exist that a filter cannot judge until they load.
+    hasUnloadedSettled,
+    scannedSettledCount: scannedSettledThreads.length,
+  };
+}
+
+/** Older settled threads in scope that this client has not loaded. */
+export function unloadedSettled(
+  threads: LayoutInput["threads"],
+  scopes: ReadonlyArray<OlderSettledScope>,
+  unloadedCount: (threads: LayoutInput["threads"]) => number,
+): number {
+  return unloadedCount(
+    threads.filter(
+      (thread) =>
+        thread.archivedAt === null &&
+        scopes.some(
+          (scope) =>
+            scope.environmentId === thread.environmentId &&
+            (scope.projectIds === null || scope.projectIds.includes(thread.projectId)),
+        ),
+    ),
+  );
 }
 
 /** The list's scope per environment: its projects there, or every project. */
-function olderSettledScopes(input: {
+export function olderSettledScopes(input: {
   readonly environmentId: EnvironmentId | null;
   readonly projectRefs: LayoutInput["projectRefs"];
   readonly settlementEnvironmentIds: ReadonlySet<EnvironmentId>;

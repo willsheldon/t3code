@@ -7,6 +7,8 @@ import { useAppearancePreferences } from "../../settings/appearance/AppearancePr
 export function ListFilterMenu(props: {
   readonly label: string;
   readonly accessibilityLabel: string;
+  /** The menu's title when the accessibility label also says the selection. */
+  readonly title?: string;
   readonly active?: boolean;
   readonly icon?: boolean;
   readonly actions: MenuProps["actions"];
@@ -15,7 +17,7 @@ export function ListFilterMenu(props: {
   const { themeAppearance } = useAppearancePreferences();
   return (
     <Menu
-      title={props.accessibilityLabel}
+      title={props.title ?? props.accessibilityLabel}
       actions={props.actions}
       onPressAction={({ nativeEvent }) => props.onSelect(nativeEvent.event)}
     >

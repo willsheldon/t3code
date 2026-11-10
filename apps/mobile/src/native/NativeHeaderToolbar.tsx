@@ -89,6 +89,7 @@ function convertMenuAction(
       onPress: register(element.props.onPress),
       state: element.props.isOn === true ? "on" : undefined,
       destructive: Boolean(element.props.destructive),
+      keepsMenuPresented: element.props.keepsMenuPresented === true ? true : undefined,
       discoverabilityLabel:
         typeof element.props.discoverabilityLabel === "string"
           ? element.props.discoverabilityLabel
@@ -169,6 +170,10 @@ function convertToolbarChild(
           ? child.props.variant
           : "plain",
       identifier: typeof child.props.identifier === "string" ? child.props.identifier : undefined,
+      badge:
+        typeof child.props.badge === "number" && child.props.badge > 0
+          ? { value: child.props.badge }
+          : undefined,
       visibilityPriority: child.props.visibilityPriority as NativeStackHeaderVisibilityPriority,
     };
   }
@@ -290,6 +295,8 @@ function NativeHeaderToolbarRoot(props: {
 function NativeHeaderToolbarButton(_props: {
   readonly accessibilityLabel?: string;
   readonly axisBehavior?: NativeStackHeaderAxisBehavior;
+  /** A count drawn on the button (iOS 26 and later); nothing for zero. */
+  readonly badge?: number;
   readonly disabled?: boolean;
   readonly icon?: string | Extract<NativeStackHeaderIcon, { type: "image" }>;
   readonly label?: string;
@@ -328,6 +335,7 @@ function NativeHeaderToolbarMenuAction(_props: {
   readonly discoverabilityLabel?: string;
   readonly icon?: string;
   readonly isOn?: boolean;
+  readonly keepsMenuPresented?: boolean;
   readonly onPress?: () => void;
   readonly subtitle?: string;
 }) {

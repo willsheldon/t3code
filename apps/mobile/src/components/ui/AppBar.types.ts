@@ -30,6 +30,8 @@ export type AppBarMenuItem =
       readonly disabled?: boolean;
       readonly selected?: boolean;
       readonly destructive?: boolean;
+      /** A toggle in a multi-select menu: the menu stays open for the next tap where supported. */
+      readonly keepsMenuPresented?: boolean;
       readonly onPress: () => void;
     }
   | {

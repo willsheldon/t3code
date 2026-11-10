@@ -183,6 +183,24 @@ it.each(["left", "right", "bottom"] as const)(
   },
 );
 
+it.each([
+  { count: 0, badge: undefined },
+  { count: 3, badge: { value: 3 } },
+])("converts a badge count of $count to $badge", ({ count, badge }) => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  root = createRoot(document.createElement("div"));
+  act(() =>
+    root!.render(
+      <NativeHeaderToolbar>
+        <NativeHeaderToolbar.Button label="Filters" badge={count} />
+      </NativeHeaderToolbar>,
+    ),
+  );
+  const button = harness.renderedItems[0];
+  if (button?.type !== "button") throw new Error("Expected the native button");
+  expect(button.badge).toEqual(badge);
+});
+
 it("applies a custom header element rendered inside a navigation container", () => {
   renderConnecting("Connecting");
   expect(renderedCustomLabel()).toBe("Connecting");

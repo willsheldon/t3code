@@ -59,6 +59,12 @@ const SETTINGS_SEARCH_TERMS = {
     "working section",
     "new threads",
     "last project",
+    "filter",
+    "thread filter",
+    "enhanced thread filter",
+    "status",
+    "account",
+    "several projects",
   ],
   SettingsThreads: [
     "new threads",
