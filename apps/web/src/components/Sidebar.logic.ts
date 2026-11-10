@@ -1,6 +1,12 @@
 import type { EnvironmentServerConfig } from "@t3tools/client-runtime/connection";
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { resolveThreadWorkingStartedAt } from "@t3tools/client-runtime/state/models";
+import { isLatestRunSettled } from "@t3tools/client-runtime/state/models";
+import {
+  hasUnseenCompletion,
+  hasUnseenFailure,
+  type ThreadFilterStatusInput,
+} from "@t3tools/client-runtime/state/thread-filters";
 import { isShownUnderParent } from "@t3tools/client-runtime/state/threads";
 import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
@@ -38,7 +44,6 @@ import {
 } from "@t3tools/client-runtime/state/thread-sort";
 import type { SidebarThreadSummary, Thread } from "../types";
 import { normalizeSearchText } from "../lib/utils";
-import { isLatestRunSettled } from "../session-logic";
 import { observeIntersection } from "../lib/observeIntersection";
 import { deadlineAfter, deadlineStore } from "@t3tools/client-runtime/clock";
 import { useDeadlinePassed } from "../hooks/useDeadline";
@@ -678,21 +683,7 @@ export interface ThreadStatusPill {
   pulse: boolean;
 }
 
-type ThreadStatusInput = Pick<
-  SidebarThreadSummary,
-  | "hasActionableProposedPlan"
-  | "hasPendingApprovals"
-  | "hasPendingUserInput"
-  | "pendingSubagentRequest"
-  | "pendingGuestMessageCount"
-  | "interactionMode"
-  | "latestRun"
-  | "runtime"
-> & {
-  lastVisitedAt?: string | null | undefined;
-  pendingBackgroundTasks?: SidebarThreadSummary["pendingBackgroundTasks"] | undefined;
-  blockedOnThreadWait?: boolean | undefined;
-};
+type ThreadStatusInput = ThreadFilterStatusInput;
 
 /**
  * Thread jump hints appear once the jump modifier has been held for a moment,
@@ -717,27 +708,6 @@ export function resolveThreadLastVisitedAt(
   // servers.
   if (serverLastVisitedAt === undefined) return localLastVisitedAt;
   return serverLastVisitedAt ?? undefined;
-}
-
-export function hasUnseenCompletion(thread: ThreadStatusInput): boolean {
-  if (!thread.latestRun?.completedAt) return false;
-  const completedAt = Date.parse(thread.latestRun.completedAt);
-  if (Number.isNaN(completedAt)) return false;
-  if (!thread.lastVisitedAt) return false;
-
-  const lastVisitedAt = Date.parse(thread.lastVisitedAt);
-  if (Number.isNaN(lastVisitedAt)) return true;
-  return completedAt > lastVisitedAt;
-}
-
-/** Unopened threads' failures still count as unseen, unlike completions. */
-function hasUnseenFailure(thread: ThreadStatusInput): boolean {
-  if (thread.latestRun?.status !== "failed") return false;
-  if (!thread.lastVisitedAt) return true;
-  const completedAt = Date.parse(thread.latestRun.completedAt ?? "");
-  const lastVisitedAt = Date.parse(thread.lastVisitedAt);
-  if (Number.isNaN(completedAt) || Number.isNaN(lastVisitedAt)) return true;
-  return completedAt > lastVisitedAt;
 }
 
 // Suppress trailing double-click navigation; keyboard and synthetic clicks use detail 0.
@@ -846,22 +816,6 @@ export type SidebarThreadStatus =
   | "failed"
   | "limited"
   | "ready";
-
-type SidebarFilterThread = {
-  readonly title: string;
-  readonly environmentId: string;
-  readonly providerInstanceId: string;
-};
-
-export function sidebarThreadAccountKey(thread: SidebarFilterThread): string {
-  return JSON.stringify([thread.environmentId, thread.providerInstanceId]);
-}
-
-/**
- * Shown for a stored account the current environments no longer offer: in the
- * enhanced filter's account select, its chip, and its trigger name.
- */
-export const SIDEBAR_UNAVAILABLE_ACCOUNT_LABEL = "Unavailable account";
 
 export function shouldRecedeSidebarThread(input: {
   status: SidebarThreadStatus;

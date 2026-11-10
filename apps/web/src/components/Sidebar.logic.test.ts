@@ -1,4 +1,5 @@
 import { presentThreadShell } from "@t3tools/client-runtime/state/models";
+import { hasUnseenCompletion } from "@t3tools/client-runtime/state/thread-filters";
 import { isThreadWorking as isSidebarThreadWorking } from "@t3tools/client-runtime/state/thread-inbox";
 import * as DateTime from "effect/DateTime";
 import { deriveActiveWorkStartedAt } from "../session-logic.ts";
@@ -9,7 +10,6 @@ import {
   shouldCreateNewThreadInCurrentProject,
   deleteSelectedThreadEntries,
   getFallbackThreadIdAfterDelete,
-  hasUnseenCompletion,
   resolveSidebarRowThreadId,
   belongsInSidebarWorkingShelf,
   isSidebarEnvironmentDisconnected,
