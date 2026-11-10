@@ -46,6 +46,7 @@ export function useThreadListFilterSelection() {
     setSelectedProjectKeys,
     setSelectedStatuses,
     setSelectedAccountKey,
+    setTitleRules,
     resetFilters,
   } = useHomeListOptions(availableEnvironmentIds);
   const selectedEnvironmentId = listOptions.selectedEnvironmentId;
@@ -81,6 +82,7 @@ export function useThreadListFilterSelection() {
     onProjectsChange: setSelectedProjectKeys,
     onStatusesChange: setSelectedStatuses,
     onAccountChange: setSelectedAccountKey,
+    onTitleRulesChange: setTitleRules,
     onReset: resetFilters,
   };
   return {
@@ -120,6 +122,7 @@ export function useThreadListFilterModel(input: {
     projectRefs: projectFilter.projectRefs,
     statuses: listOptions.selectedStatuses,
     accountKey: listOptions.selectedAccountKey,
+    rules: listOptions.titleRules,
   });
   const filterState: HomeListFilterMenuState = {
     environments,

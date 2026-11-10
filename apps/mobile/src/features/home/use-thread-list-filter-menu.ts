@@ -1,5 +1,8 @@
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import type { ThreadFilterStatus } from "@t3tools/client-runtime/state/thread-filters";
+import type {
+  ThreadFilterStatus,
+  ThreadTitleRule,
+} from "@t3tools/client-runtime/state/thread-filters";
 import type { EnvironmentId, ScopedProjectRef } from "@t3tools/contracts";
 import { useMemo } from "react";
 
@@ -8,6 +11,7 @@ import { threadListEnvironmentsAtom } from "../../state/presentation";
 import { olderSettledScopes, unloadedSettled } from "../threads/useThreadListV2";
 import type { HomeListFilterMenuEnhanced } from "./home-list-filter-menu";
 import { useAtomValueWhileVisible } from "./home-route-visibility";
+import { threadFilterGuardStore } from "./thread-filter-guard-store";
 import {
   countThreadListStatuses,
   projectRefKeys,
@@ -32,6 +36,7 @@ export function useEnhancedThreadFilterMenu(input: {
   readonly projectRefs: ReadonlyArray<ScopedProjectRef> | null;
   readonly statuses: ReadonlyArray<ThreadFilterStatus>;
   readonly accountKey: string | null;
+  readonly rules: ReadonlyArray<ThreadTitleRule>;
 }): HomeListFilterMenuEnhanced | null {
   const { enabled, threads } = input;
   const { providersByEnvironmentId, settlementEnvironmentIds } = useAtomValueWhileVisible(
@@ -61,9 +66,11 @@ export function useEnhancedThreadFilterMenu(input: {
             threads,
             { environmentId: input.environmentId, projectKeys: projectRefKeys(input.projectRefs) },
             input.accountKey,
+            input.rules,
+            threadFilterGuardStore,
           )
         : null,
-    [enabled, threads, input.environmentId, input.projectRefs, input.accountKey],
+    [enabled, threads, input.environmentId, input.projectRefs, input.accountKey, input.rules],
   );
   // A collapsed shelf mounts no pages; this only reads how many older settled threads exist.
   const scopes = useMemo(
@@ -91,8 +98,17 @@ export function useEnhancedThreadFilterMenu(input: {
             doneHasMore,
             accountOptions,
             selectedAccountKey: input.accountKey,
+            rules: input.rules,
           }
         : null,
-    [enabled, input.statuses, statusCounts, doneHasMore, accountOptions, input.accountKey],
+    [
+      enabled,
+      input.statuses,
+      statusCounts,
+      doneHasMore,
+      accountOptions,
+      input.accountKey,
+      input.rules,
+    ],
   );
 }

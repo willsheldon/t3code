@@ -263,20 +263,21 @@ Your rules are kept and come back when you turn it on again.
 
 ### Filter on mobile
 
-The mobile app has the same status, account and project filters. They are a
-native sheet or menus instead of a popover, and mobile has no title rules yet.
+The mobile app has the same status, account, project and title-rule filters. They
+are a native sheet or menus instead of a popover.
 
 - **iPhone and iPad.** The **Filters** button beside Search in the thread list's
   header opens a sheet with every filter, so no chip row takes room under the
   search field. The button fills in while a filter is set, and shows how many
-  choices are set on iOS 26 and later. Each status, each project, the
-  environment and the account count as one. VoiceOver reads it as **Filters, 3
-  active**. Changes apply at once to the list behind the sheet. The sheet opens
+  choices are set on iOS 26 and later. Each status, each project, each title
+  rule that is on, the environment and the account count as one. VoiceOver reads
+  it as **Filters, 3 active**. Changes apply at once to the list behind the sheet. The sheet opens
   at half height; drag it up for more room. Tap the close button when finished.
 - **Android.** The filter menu beside the search field holds the same filters
-  as submenus.
+  as submenus. Menus cannot take typed text, so **Title rules…** at the end of
+  the menu opens the filter sheet.
 - **Tablet sidebar.** The filter button in the sidebar header opens the same
-  menus as submenus.
+  menus as submenus, with the same **Title rules…** entry.
 - **Reset.** **Reset** in the sheet header clears every filter. It is available
   only while a filter is set. The Android filter menu and the tablet filter
   button have a **Reset filters** entry that appears the same way.
@@ -289,6 +290,14 @@ native sheet or menus instead of a popover, and mobile has no title rules yet.
   A project you saved before this filter existed stays selected.
 - **Environment.** Pick one environment, or **All environments**.
 - **Account** appears when you have more than one account, or one is selected.
+- **Title rules** are at the bottom of the sheet. Tap **Add rule** for up to 20
+  rules. Each rule is **Hide** or **Only**, as on web, with a text field, a
+  **Regex** switch, an on and off switch, and a remove button. The list follows a
+  rule when you stop typing. A rule with an invalid regular expression shows the
+  error and has no effect. If a regular expression makes the app unresponsive,
+  the rule is turned off the next time the app starts and says so; switch it on
+  again to retry it. Rules are remembered on this device, and **Reset** clears
+  them.
 
 In the tablet sidebar's menus the menu stays open while you check several statuses
 or projects. On Android a menu closes after each tap, so open it again to add another.

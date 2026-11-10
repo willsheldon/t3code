@@ -9,11 +9,16 @@ import {
   compileThreadTitleRules,
   countThreadFilterStatuses,
   hasLiveThreadFilters,
+  initializeThreadFilter,
   matchesThreadFilters,
   resolveThreadFilterStatus,
   threadAccountKey,
+  warmThreadTitleRuleCache,
+  THREAD_FILTER_KEY,
   type ThreadFilterStatus,
   type ThreadFilterStatusCounts,
+  type ThreadFilterStore,
+  type ThreadTitleRule,
 } from "@t3tools/client-runtime/state/thread-filters";
 import {
   isListedThreadLineage,
@@ -27,17 +32,46 @@ import { resolveScratchProjectScopeKey } from "@t3tools/client-runtime/state/pro
 import { scopedThreadKey } from "../../lib/scopedEntities";
 import type { HomeProjectScope } from "./homeThreadList";
 
-// The mobile filter has no title rules yet, so nothing here hides a thread by its title.
-const NO_TITLE_RULES = compileThreadTitleRules([]);
+const NO_TITLE_RULES: ReadonlyArray<ThreadTitleRule> = [];
 
 export type ThreadListFilterSelection = {
   readonly statuses: ReadonlyArray<ThreadFilterStatus>;
   readonly accountKey: string | null;
+  /** Title rules; only the live ones filter. */
+  readonly rules?: ReadonlyArray<ThreadTitleRule> | undefined;
 };
 
-/** Whether the status or account selection can hide a thread. */
+/** Whether the status, account or title rules can hide a thread. */
 export const hasThreadListFilter = (selection: ThreadListFilterSelection): boolean =>
-  hasLiveThreadFilters({ compiled: NO_TITLE_RULES, ...selection });
+  hasLiveThreadFilters({
+    compiled: compileThreadTitleRules(selection.rules ?? NO_TITLE_RULES),
+    accountKey: selection.accountKey,
+    statuses: selection.statuses,
+  });
+
+/**
+ * Turns off the regex rules of a pass that never finished, as the web sidebar does at startup.
+ * `store` holds the pass marker; the rules themselves are saved with the other list filters, so
+ * they are lent to the shared guard through a one-key view. Returns `rules` itself when none tripped.
+ */
+export function tripHungTitleRules(
+  rules: ReadonlyArray<ThreadTitleRule>,
+  store: ThreadFilterStore,
+  newId: () => string,
+  now?: number,
+): ReadonlyArray<ThreadTitleRule> {
+  const view: ThreadFilterStore = {
+    getItem: (key) => (key === THREAD_FILTER_KEY ? JSON.stringify({ rules }) : store.getItem(key)),
+    setItem: (key, value) => {
+      if (key !== THREAD_FILTER_KEY) store.setItem(key, value);
+    },
+    removeItem: (key) => {
+      if (key !== THREAD_FILTER_KEY) store.removeItem(key);
+    },
+  };
+  const next = initializeThreadFilter(view, newId, now).rules;
+  return next.some((rule, index) => rule.tripped !== rules[index]?.tripped) ? next : rules;
+}
 
 const statusOf = (thread: EnvironmentThreadShell) => resolveThreadFilterStatus(thread);
 
@@ -50,11 +84,19 @@ export function filterThreadsForList(
   threads: ReadonlyArray<EnvironmentThreadShell>,
   selection: ThreadListFilterSelection,
   openThreadKey: string | null,
+  guardStore: ThreadFilterStore | null = null,
 ): ReadonlyArray<EnvironmentThreadShell> {
   if (!hasThreadListFilter(selection)) return threads;
+  const compiled = compileThreadTitleRules(selection.rules ?? NO_TITLE_RULES);
+  // Matching every title first, between the pass marker's write and removal, is the hang guard.
+  warmThreadTitleRuleCache(
+    compiled,
+    threads.map((thread) => thread.title),
+    guardStore,
+  );
   return threads.filter((thread) =>
     matchesThreadFilters(thread, {
-      compiled: NO_TITLE_RULES,
+      compiled,
       accountKey: selection.accountKey,
       isOpen: scopedThreadKey(thread.environmentId, thread.id) === openThreadKey,
       status: { selected: selection.statuses, of: statusOf },
@@ -91,18 +133,25 @@ export function isThreadInListScope(
 
 /**
  * How many threads each status would show. A count ignores the status selection, so it says
- * what selecting that status adds, and it respects the scope and the account.
+ * what selecting that status adds, and it respects the scope, the account and the title rules.
  */
 export function countThreadListStatuses(
   threads: ReadonlyArray<EnvironmentThreadShell>,
   scope: ThreadListScope,
   accountKey: string | null,
+  rules: ReadonlyArray<ThreadTitleRule> = NO_TITLE_RULES,
+  guardStore: ThreadFilterStore | null = null,
 ): ThreadFilterStatusCounts {
+  const compiled = compileThreadTitleRules(rules);
+  const inScope = threads.filter((thread) => isThreadInListScope(thread, scope));
+  warmThreadTitleRuleCache(
+    compiled,
+    inScope.map((thread) => thread.title),
+    guardStore,
+  );
   return countThreadFilterStatuses(
-    threads.filter(
-      (thread) =>
-        isThreadInListScope(thread, scope) &&
-        matchesThreadFilters(thread, { compiled: NO_TITLE_RULES, accountKey, isOpen: false }),
+    inScope.filter((thread) =>
+      matchesThreadFilters(thread, { compiled, accountKey, isOpen: false }),
     ),
     statusOf,
   );

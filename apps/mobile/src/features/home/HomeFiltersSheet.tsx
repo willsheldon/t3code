@@ -20,6 +20,7 @@ import {
   type HomeListFilterMenuEntry,
   type HomeListFilterSheetStatus,
 } from "./home-list-filter-menu";
+import { TitleRulesSection } from "./TitleRulesSection";
 import { useThreadListFilterModel } from "./use-thread-list-filter-model";
 
 function StatusButton(props: {
@@ -157,6 +158,7 @@ export function HomeFiltersSheet() {
       <ScrollView
         alwaysBounceVertical
         keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
         keyboardDismissMode="interactive"
         className="flex-1 bg-screen"
         contentInsetAdjustmentBehavior="automatic"
@@ -195,7 +197,12 @@ export function HomeFiltersSheet() {
             <EntryList entries={sheet.account} role="radio" onSelect={select} />
           </ListSection>
         )}
-        {/* Title rules join the sections here. */}
+        {filterState.enhanced === null ? null : (
+          <TitleRulesSection
+            rules={filterState.enhanced.rules}
+            onChange={filterControls.onTitleRulesChange}
+          />
+        )}
       </ScrollView>
     </View>
   );

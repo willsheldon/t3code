@@ -1,4 +1,12 @@
-import { resolveThreadFilterStatus } from "@t3tools/client-runtime/state/thread-filters";
+import {
+  THREAD_FILTER_GUARD_MESSAGE,
+  THREAD_FILTER_PASS_KEY,
+  compileThreadTitleRules,
+  newThreadTitleRule,
+  resolveThreadFilterStatus,
+  type ThreadFilterStore,
+  type ThreadTitleRule,
+} from "@t3tools/client-runtime/state/thread-filters";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import {
   EnvironmentId,
@@ -15,11 +23,13 @@ import type { HomeProjectScope } from "./homeThreadList";
 import {
   countThreadListStatuses,
   filterThreadsForList,
+  hasThreadListFilter,
   projectRefKeys,
   resolveProjectFilter,
   soleProjectScope,
   threadListAccountOptions,
   toggleProjectKey,
+  tripHungTitleRules,
 } from "./thread-list-filters";
 
 const ENV_A = EnvironmentId.make("env-a");
@@ -142,6 +152,147 @@ describe("filterThreadsForList", () => {
     // The two unsettled Done threads list as rows; the three settled ones page behind the limit.
     expect(doneOnly.settledCount).toBe(3);
     expect(doneOnly.hiddenSettledCount).toBe(2);
+  });
+});
+
+function memoryStore(): ThreadFilterStore & { readonly items: Map<string, string> } {
+  const items = new Map<string, string>();
+  return {
+    items,
+    getItem: (key) => items.get(key) ?? null,
+    setItem: (key, value) => void items.set(key, value),
+    removeItem: (key) => void items.delete(key),
+  };
+}
+const rule = (id: string, patch: Partial<ThreadTitleRule>): ThreadTitleRule => ({
+  ...newThreadTitleRule(id),
+  ...patch,
+});
+
+describe("title rules in the list", () => {
+  const titled = ["Fix login", "fix: search", "Add docs", "WIP login"].map((title) =>
+    thread(title, "done", { title }),
+  );
+  const titles = (rules: ThreadTitleRule[], open: string | null = null) =>
+    filterThreadsForList(titled, { statuses: [], accountKey: null, rules }, open).map(
+      (entry) => entry.title,
+    );
+
+  it("filters only when a rule is live", () => {
+    expect(hasThreadListFilter({ statuses: [], accountKey: null, rules: [] })).toBe(false);
+    expect(
+      hasThreadListFilter({
+        statuses: [],
+        accountKey: null,
+        rules: [rule("a", { pattern: " " }), rule("b", { pattern: "x", enabled: false })],
+      }),
+    ).toBe(false);
+    expect(
+      hasThreadListFilter({ statuses: [], accountKey: null, rules: [rule("a", { pattern: "x" })] }),
+    ).toBe(true);
+    expect(filterThreadsForList(titled, { statuses: [], accountKey: null, rules: [] }, null)).toBe(
+      titled,
+    );
+  });
+
+  it("hides matches, ignoring case, and keeps only matches", () => {
+    expect(titles([rule("a", { pattern: "LOGIN" })])).toEqual(["fix: search", "Add docs"]);
+    expect(titles([rule("a", { mode: "only", pattern: "login" })])).toEqual([
+      "Fix login",
+      "WIP login",
+    ]);
+  });
+
+  it("combines rules as the web sidebar does: no Hide match, and any Only match", () => {
+    expect(
+      titles([
+        rule("a", { mode: "only", pattern: "login" }),
+        rule("b", { mode: "only", pattern: "docs" }),
+        rule("c", { pattern: "^wip", regex: true }),
+      ]),
+    ).toEqual(["Fix login", "Add docs"]);
+  });
+
+  it("ignores an invalid regex and a tripped rule", () => {
+    expect(titles([rule("a", { pattern: "(", regex: true })])).toEqual(titles([]));
+    expect(titles([rule("a", { pattern: "fix", enabled: false, tripped: true })])).toHaveLength(4);
+  });
+
+  it("keeps the open thread and combines with status", () => {
+    expect(titles([rule("a", { mode: "only", pattern: "docs" })], key(titled[0]!))).toEqual([
+      "Fix login",
+      "Add docs",
+    ]);
+    const mixed = [
+      thread("a", "done", { title: "alpha" }),
+      thread("b", "done", { title: "beta" }),
+      thread("c", "working", { title: "gamma" }),
+    ];
+    expect(
+      filterThreadsForList(
+        mixed,
+        { statuses: ["done"], accountKey: null, rules: [rule("a", { pattern: "al" })] },
+        null,
+      ).map((entry) => entry.title),
+    ).toEqual(["beta"]);
+  });
+
+  it("writes the pass marker once and clears it after matching", () => {
+    const store = memoryStore();
+    const writes: string[] = [];
+    const recording: ThreadFilterStore = {
+      ...store,
+      setItem: (key, value) => {
+        writes.push(key);
+        store.setItem(key, value);
+      },
+    };
+    titles([rule("a", { pattern: "fix", regex: true })]);
+    filterThreadsForList(
+      titled,
+      { statuses: [], accountKey: null, rules: [rule("a", { pattern: "wip", regex: true })] },
+      null,
+      recording,
+    );
+    expect(writes).toEqual([THREAD_FILTER_PASS_KEY]);
+    expect(store.items.size).toBe(0);
+  });
+
+  it("counts statuses within the title rules", () => {
+    const everything = { environmentId: null, projectKeys: null };
+    expect(
+      countThreadListStatuses(titled, everything, null, [rule("a", { pattern: "login" })]),
+    ).toMatchObject({ done: 2 });
+    expect(countThreadListStatuses(titled, everything, null)).toMatchObject({ done: 4 });
+  });
+});
+
+describe("tripHungTitleRules", () => {
+  const regex = rule("a", { pattern: "(a+)+$", regex: true });
+  const plain = rule("b", { pattern: "wip" });
+  const marker = (at: number) =>
+    JSON.stringify({ fingerprint: JSON.stringify([["a", "(a+)+$"]]), at });
+
+  it("turns off the regex rules of a pass that never finished, and clears the marker", () => {
+    const store = memoryStore();
+    store.items.set(THREAD_FILTER_PASS_KEY, marker(0));
+    const tripped = tripHungTitleRules([regex, plain], store, () => "id", 10_000);
+    expect(tripped).toEqual([{ ...regex, enabled: false, tripped: true }, plain]);
+    expect(store.items.size).toBe(0);
+    expect(compileThreadTitleRules(tripped).errors.get("a")).toBe(THREAD_FILTER_GUARD_MESSAGE);
+  });
+
+  it("returns the same rules when no pass was left behind", () => {
+    const rules = [regex, plain];
+    expect(tripHungTitleRules(rules, memoryStore(), () => "id")).toBe(rules);
+  });
+
+  it("leaves a recent pass alone and never writes the rules into the store", () => {
+    const store = memoryStore();
+    store.items.set(THREAD_FILTER_PASS_KEY, marker(9_500));
+    const rules = [regex];
+    expect(tripHungTitleRules(rules, store, () => "id", 10_000)).toBe(rules);
+    expect([...store.items.keys()]).toEqual([THREAD_FILTER_PASS_KEY]);
   });
 });
 

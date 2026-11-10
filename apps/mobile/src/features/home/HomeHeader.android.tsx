@@ -15,6 +15,7 @@ export function HomeHeader(props: HomeHeaderProps) {
   const menuActions = homeListFilterSubmenuActions(
     buildHomeListFilterSections(props.filterState),
     filterCustomized,
+    props.filterState.enhanced !== null && props.filterControls.onOpenRules !== undefined,
   );
 
   return (
