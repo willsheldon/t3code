@@ -237,15 +237,24 @@ describe("title rules in the list", () => {
     ).toEqual(["beta"]);
   });
 
-  it("leaves the pass marker only if matching never finished", () => {
+  it("writes the pass marker before matching and clears it after", () => {
     const store = memoryStore();
+    const writes: string[] = [];
+    const recording: ThreadFilterStore = {
+      ...store,
+      setItem: (key, value) => {
+        writes.push(key);
+        store.setItem(key, value);
+      },
+    };
     titles([rule("a", { pattern: "fix", regex: true })]);
     filterThreadsForList(
       titled,
       { statuses: [], accountKey: null, rules: [rule("a", { pattern: "wip", regex: true })] },
       null,
-      store,
+      recording,
     );
+    expect(writes).toEqual([THREAD_FILTER_PASS_KEY]);
     expect(store.items.size).toBe(0);
   });
 

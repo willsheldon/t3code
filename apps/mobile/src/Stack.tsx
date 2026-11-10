@@ -626,7 +626,7 @@ const RootStackConfig = createWorkspaceStackNavigator({
     }),
     HomeFilters: createNativeStackScreen({
       screen: HomeFiltersSheet,
-      // iOS only: the header's filter button opens it in place of the chip row.
+      // iOS opens it from the header's filter button; Android and tablets from the "Title rules…" menu entry.
       options: {
         ...(Platform.OS === "ios" ? SHEET_GLASS_HEADER_OPTIONS : undefined),
         ...HORIZONTAL_FORM_SHEET_OPTIONS,

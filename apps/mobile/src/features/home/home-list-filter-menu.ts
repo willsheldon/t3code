@@ -2,7 +2,7 @@ import type { MenuAction } from "@react-native-menu/menu";
 import {
   THREAD_FILTER_STATUS_OPTIONS,
   UNAVAILABLE_ACCOUNT_LABEL,
-  isThreadTitleRuleLive,
+  compileThreadTitleRules,
   toggleThreadFilterStatus,
   type ThreadFilterStatus,
   type ThreadFilterStatusCounts,
@@ -86,7 +86,7 @@ export const homeListFilterActiveCount = (selection: HomeListFilterSelection): n
     ? 0
     : selection.enhanced.statuses.length +
       (selection.enhanced.selectedAccountKey === null ? 0 : 1) +
-      selection.enhanced.rules.filter(isThreadTitleRuleLive).length);
+      compileThreadTitleRules(selection.enhanced.rules).liveCount);
 
 /** Whether any filter narrows the list, which the reset control and the filter icon show. */
 export const isHomeListFilterCustomized = (state: HomeListFilterSelection): boolean =>

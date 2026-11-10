@@ -158,6 +158,7 @@ export function HomeFiltersSheet() {
       <ScrollView
         alwaysBounceVertical
         keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
         keyboardDismissMode="interactive"
         className="flex-1 bg-screen"
         contentInsetAdjustmentBehavior="automatic"

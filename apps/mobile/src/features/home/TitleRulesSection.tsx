@@ -49,10 +49,18 @@ function RuleRow(props: {
     if (timer.current !== null) clearTimeout(timer.current);
     timer.current = null;
   };
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- clears the pending commit timer when the row unmounts.
+  // The latest draft and change handler, so an unmount can still save a pattern typed just before it.
+  const pending = useRef<{ draft: string; onChange: typeof props.onChange; ruleId: string } | null>(
+    null,
+  );
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- saves an uncommitted draft when the row unmounts.
   useEffect(
     () => () => {
-      if (timer.current !== null) clearTimeout(timer.current);
+      if (timer.current === null) return;
+      clearTimeout(timer.current);
+      const last = pending.current;
+      // A rule that Remove or Reset already dropped is ignored by setThreadTitleRulePattern.
+      if (last) last.onChange((rules) => setThreadTitleRulePattern(rules, last.ruleId, last.draft));
     },
     [],
   );
@@ -118,6 +126,7 @@ function RuleRow(props: {
           onChangeText={(text) => {
             setDraft(text);
             clearTimer();
+            pending.current = { draft: text, onChange: props.onChange, ruleId: rule.id };
             timer.current = setTimeout(() => commit(text), PATTERN_COMMIT_DELAY_MS);
           }}
           onBlur={() => commit(draft)}
