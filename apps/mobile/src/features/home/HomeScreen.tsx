@@ -11,7 +11,7 @@ import {
 } from "@t3tools/client-runtime/state/shell";
 import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
-import { type EnvironmentId, type SidebarProjectGroupingMode } from "@t3tools/contracts";
+import { type EnvironmentId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { use, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import {
@@ -76,12 +76,14 @@ import {
   type ThreadListV2ListItem,
 } from "../threads/threadListV2";
 import { useThreadListV2ShelfPreferences } from "../threads/use-thread-list-v2-shelf-preferences";
-import type { HomeListFilterMenuEnvironment } from "./home-list-filter-menu";
-import {
-  buildHomeProjectScopes,
-  findHomeProjectScope,
-  type HomeProjectSortOrder,
-} from "./homeThreadList";
+import type {
+  HomeListFilterControls,
+  HomeListFilterMenuEnvironment,
+  HomeListFilterMenuState,
+} from "./home-list-filter-menu";
+import { buildHomeProjectScopes } from "./homeThreadList";
+import type { ResolvedHomeListOptions } from "./home-list-options";
+import { resolveProjectFilter, soleProjectScope } from "./thread-list-filters";
 import { createSwipeRowActivation } from "./swipe-row-activation";
 import { SwipeableScrollGateProvider, useSwipeableScrollGate } from "./thread-swipe-actions";
 import { useFabScroll } from "./FabScrollContext";
@@ -99,12 +101,10 @@ interface HomeScreenProps {
   >;
   readonly searchQuery: string;
   readonly selectedEnvironmentId: EnvironmentId | null;
-  readonly selectedProjectKey: string | null;
-  readonly projectSortOrder: HomeProjectSortOrder;
-  readonly projectGroupingMode: SidebarProjectGroupingMode;
+  readonly filterState: HomeListFilterMenuState;
+  readonly filterControls: HomeListFilterControls;
+  readonly listOptions: ResolvedHomeListOptions;
   readonly onSearchQueryChange: (query: string) => void;
-  readonly onEnvironmentChange: (environmentId: EnvironmentId | null) => void;
-  readonly onProjectChange: (projectKey: string | null) => void;
   readonly onAddConnection: () => void;
   readonly onOpenSettings: () => void;
   readonly onStartNewTask: () => void;
@@ -136,6 +136,7 @@ interface HomeScreenProps {
   readonly onNewThreadInProject: (project: EnvironmentProject) => void;
 }
 
+const NO_FILTER_STATUSES: ResolvedHomeListOptions["selectedStatuses"] = [];
 const ESTIMATED_THREAD_LIST_V2_ROW_HEIGHT = 72;
 // Rows away from the viewport skip their swipe actions (see
 // swipe-row-activation), so render further ahead: a fast fling then reaches
@@ -362,7 +363,8 @@ export function HomeScreen(props: HomeScreenProps) {
     onScrollBeginDrag: handleScrollBeginDrag,
   });
 
-  const { projects, selectedEnvironmentId, projectGroupingMode } = props;
+  const { projects, selectedEnvironmentId, listOptions } = props;
+  const { projectGroupingMode } = listOptions;
   const projectScopes = useMemo(
     () =>
       buildHomeProjectScopes({
@@ -381,18 +383,32 @@ export function HomeScreen(props: HomeScreenProps) {
     return map;
   })();
 
-  const v2ProjectScopeKey = props.selectedProjectKey;
+  const { filterState } = props;
+  // Saved status and account stay stored while the setting is off; only apply them when it is on.
+  const filterStatuses = listOptions.enhancedFilterEnabled
+    ? listOptions.selectedStatuses
+    : NO_FILTER_STATUSES;
+  const filterAccountKey = listOptions.enhancedFilterEnabled
+    ? listOptions.selectedAccountKey
+    : null;
+  const filterKeys = filterState.selectedProjectKeys;
   // An archived project's filter reads as all projects, matching the filter menu.
-  const v2ScopedProjectGroup = findHomeProjectScope(
-    pickableProjectGroups(projectScopes),
-    v2ProjectScopeKey,
+  const projectFilter = useMemo(
+    () =>
+      resolveProjectFilter({
+        keys: filterKeys,
+        projects,
+        scopes: pickableProjectGroups(projectScopes),
+        projectGroupingMode,
+      }),
+    [filterKeys, projects, projectScopes, projectGroupingMode],
   );
   const threadSearch = useThreadSearch(
     searchEnvironmentIds,
     props.searchQuery,
-    v2ScopedProjectGroup === null
+    projectFilter.projectRefs === null
       ? {}
-      : { projectIds: v2ScopedProjectGroup.projectRefs.map((ref) => ref.projectId) },
+      : { projectIds: projectFilter.projectRefs.map((ref) => ref.projectId) },
   );
   const threadSearchMatchByKey = useThreadListSearchMatches(props.threads, threadSearch);
   const v2ProjectTitleByProjectKey = new Map(
@@ -417,14 +433,18 @@ export function HomeScreen(props: HomeScreenProps) {
   const [settledVisibleCount, setSettledVisibleCount] = useState(
     THREAD_LIST_V2_SETTLED_INITIAL_COUNT,
   );
-  const settledResetKey = `${props.selectedEnvironmentId ?? "all"}:${v2ProjectScopeKey ?? "all"}:${props.searchQuery.trim()}`;
+  const settledResetKey = JSON.stringify([
+    props.selectedEnvironmentId,
+    projectFilter.keys,
+    filterStatuses,
+    filterAccountKey,
+    props.searchQuery.trim(),
+  ]);
   const [lastSettledResetKey, setLastSettledResetKey] = useState(settledResetKey);
   if (lastSettledResetKey !== settledResetKey) {
     setLastSettledResetKey(settledResetKey);
     setSettledVisibleCount(THREAD_LIST_V2_SETTLED_INITIAL_COUNT);
   }
-  const showMoreSettled = () =>
-    setSettledVisibleCount((count) => count + THREAD_LIST_V2_SETTLED_PAGE_COUNT);
   const {
     loaded: shelfPreferencesLoaded,
     settledShelfExpanded,
@@ -456,11 +476,16 @@ export function HomeScreen(props: HomeScreenProps) {
     items: threadListV2Items,
     contentOnlyThreadKeys,
     olderSettledShelf,
+    filtering,
+    hasUnloadedSettled,
+    scannedSettledCount,
   } = useThreadListV2({
     threads: props.threads,
     pendingTasks: props.pendingTasks,
     environmentId: props.selectedEnvironmentId,
-    projectRefs: v2ScopedProjectGroup === null ? null : v2ScopedProjectGroup.projectRefs,
+    projectRefs: projectFilter.projectRefs,
+    statuses: filterStatuses,
+    accountKey: filterAccountKey,
     searchQuery: props.searchQuery,
     searchMatches: threadSearchMatchByKey,
     settlementEnvironmentIds,
@@ -478,6 +503,12 @@ export function HomeScreen(props: HomeScreenProps) {
     settledShelfExpanded,
     selectedThreadKey,
   });
+  // A filtered list pages through the settled threads it scanned, not only the matches shown.
+  const showMoreSettled = () =>
+    setSettledVisibleCount(
+      (count) =>
+        Math.max(count, filtering ? scannedSettledCount : 0) + THREAD_LIST_V2_SETTLED_PAGE_COUNT,
+    );
   // Called as `props.onSelectThread(...)`, the compiler would cache this handler on the whole
   // props object, which is new on every render of Home's parent.
   const { onSelectThread } = props;
@@ -717,18 +748,12 @@ export function HomeScreen(props: HomeScreenProps) {
   const v2ListHeader = (
     <>
       {listHeader}
-      {Platform.OS === "ios" && workspace ? (
+      {/* With the enhanced filter on, the header's filter button opens the filters instead. */}
+      {Platform.OS === "ios" && workspace && !listOptions.enhancedFilterEnabled ? (
         <ThreadListFilters
           gutter={primaryColumn ? 8 : 0}
-          environments={props.environments}
-          projects={pickableProjectGroups(projectScopes).map((scope) => ({
-            key: scope.key,
-            label: scope.title,
-          }))}
-          selectedEnvironmentId={props.selectedEnvironmentId}
-          selectedProjectKey={props.selectedProjectKey}
-          onEnvironmentChange={props.onEnvironmentChange}
-          onProjectChange={props.onProjectChange}
+          filterState={filterState}
+          filterControls={props.filterControls}
         />
       ) : null}
     </>
@@ -741,9 +766,15 @@ export function HomeScreen(props: HomeScreenProps) {
         detail={`No threads matching "${props.searchQuery}".`}
         variant={Platform.OS === "android" ? "plain" : undefined}
       />
-    ) : v2ScopedProjectGroup !== null ? (
+    ) : filtering || projectFilter.scopes.length > 1 ? (
       <EmptyState
-        title={`No threads in ${v2ScopedProjectGroup.title}`}
+        title="No threads match filters"
+        detail="Change or reset the filters, or create a new task."
+        variant={Platform.OS === "android" ? "plain" : undefined}
+      />
+    ) : soleProjectScope(projectFilter.scopes) !== null ? (
+      <EmptyState
+        title={`No threads in ${soleProjectScope(projectFilter.scopes)?.title}`}
         detail="Choose another project or create a new task."
         variant={Platform.OS === "android" ? "plain" : undefined}
       />
@@ -804,7 +835,8 @@ export function HomeScreen(props: HomeScreenProps) {
               extraData={v2ExtraData}
               ListHeaderComponent={v2ListHeader}
               ListFooterComponent={
-                settledShelfExpanded && threadListV2Layout.hiddenSettledCount > 0 ? (
+                settledShelfExpanded &&
+                (threadListV2Layout.hiddenSettledCount > 0 || hasUnloadedSettled) ? (
                   <ThreadListV2ShowMoreRow
                     hiddenCount={threadListV2Layout.hiddenSettledCount}
                     {...(olderSettledShelf.loading

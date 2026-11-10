@@ -1,103 +1,86 @@
-import { Pressable, ScrollView } from "react-native";
+import { Pressable, View } from "react-native";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { ListFilterMenu } from "../workspace/ListFilterMenu";
+import {
+  applyHomeListFilterAction,
+  buildHomeListFilterSections,
+  homeListFilterChipAccessibilityLabels,
+  homeListFilterMenuActions,
+  isHomeListFilterCustomized,
+  projectFilterLabel,
+} from "./home-list-filter-menu";
 import type { HomeHeaderProps } from "./HomeHeader.types";
 
+/**
+ * The chip row under the search field while the enhanced filter is off: the environment and
+ * project chips and the reset. With it on, the header's filter button opens the filter sheet.
+ */
 export function ThreadListFilters(
-  props: Pick<
-    HomeHeaderProps,
-    | "environments"
-    | "projects"
-    | "selectedEnvironmentId"
-    | "selectedProjectKey"
-    | "onEnvironmentChange"
-    | "onProjectChange"
-  > & {
+  props: Pick<HomeHeaderProps, "filterState" | "filterControls"> & {
     /** List padding the scroller bleeds through so pills start where row content does. */
     readonly gutter: number;
   },
 ) {
-  const selectedEnvironment = props.environments.find(
-    (environment) => environment.environmentId === props.selectedEnvironmentId,
+  const { filterState, filterControls } = props;
+  const selectedEnvironment = filterState.environments.find(
+    (environment) => environment.environmentId === filterState.selectedEnvironmentId,
   );
-  const selectedProject = props.projects.find(
-    (project) => project.key === props.selectedProjectKey,
-  );
+  const sections = buildHomeListFilterSections(filterState);
+  const labels = homeListFilterChipAccessibilityLabels(filterState);
+  const chip = (id: "environment" | "project") => {
+    const section = sections.find((candidate) => candidate.id === id);
+    return section === undefined
+      ? null
+      : {
+          actions: homeListFilterMenuActions(section.entries),
+          onSelect: (entryId: string) =>
+            applyHomeListFilterAction(entryId, filterState, filterControls),
+        };
+  };
+  const environmentChip = chip("environment");
+  const projectChip = chip("project");
+  // The row wraps instead of scrolling, so both chips and the reset stay fully visible
+  // however long the labels get.
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={{ marginHorizontal: -props.gutter }}
-      contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 2, paddingBottom: 10, gap: 8 }}
+    <View
+      className="flex-row flex-wrap items-center"
+      style={{
+        marginHorizontal: -props.gutter,
+        paddingHorizontal: 20,
+        paddingTop: 2,
+        paddingBottom: 10,
+        gap: 8,
+      }}
     >
-      <ListFilterMenu
-        label={selectedEnvironment?.label ?? "All environments"}
-        accessibilityLabel="Filter threads by environment"
-        active={selectedEnvironment !== undefined}
-        actions={[
-          {
-            id: "all",
-            title: "All environments",
-            state: props.selectedEnvironmentId === null ? "on" : "off",
-          },
-          ...props.environments.map((environment) => ({
-            id: JSON.stringify(environment.environmentId),
-            title: environment.label,
-            state:
-              environment.environmentId === props.selectedEnvironmentId
-                ? ("on" as const)
-                : ("off" as const),
-          })),
-        ]}
-        onSelect={(id) => {
-          if (id === "all") props.onEnvironmentChange(null);
-          else {
-            const environment = props.environments.find(
-              (candidate) => JSON.stringify(candidate.environmentId) === id,
-            );
-            if (environment) props.onEnvironmentChange(environment.environmentId);
-          }
-        }}
-      />
-      <ListFilterMenu
-        label={selectedProject?.label ?? "All projects"}
-        accessibilityLabel="Filter threads by project"
-        active={selectedProject !== undefined}
-        actions={[
-          {
-            id: "all",
-            title: "All projects",
-            state: props.selectedProjectKey === null ? "on" : "off",
-          },
-          ...props.projects.map((project) => ({
-            id: JSON.stringify(project.key),
-            title: project.label,
-            state: project.key === props.selectedProjectKey ? ("on" as const) : ("off" as const),
-          })),
-        ]}
-        onSelect={(id) => {
-          if (id === "all") props.onProjectChange(null);
-          else {
-            const project = props.projects.find(
-              (candidate) => JSON.stringify(candidate.key) === id,
-            );
-            if (project) props.onProjectChange(project.key);
-          }
-        }}
-      />
-      {props.selectedEnvironmentId !== null || props.selectedProjectKey !== null ? (
+      {environmentChip === null ? null : (
+        <ListFilterMenu
+          label={selectedEnvironment?.label ?? "All environments"}
+          title="Filter threads by environment"
+          accessibilityLabel={labels.environment}
+          active={selectedEnvironment !== undefined}
+          {...environmentChip}
+        />
+      )}
+      {projectChip === null ? null : (
+        <ListFilterMenu
+          label={projectFilterLabel(filterState.projects, filterState.selectedProjectKeys)}
+          title="Filter threads by project"
+          accessibilityLabel={labels.project}
+          active={filterState.selectedProjectKeys.length > 0}
+          {...projectChip}
+        />
+      )}
+      {isHomeListFilterCustomized(filterState) ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Reset thread filters"
+          hitSlop={6}
           className="h-8 w-8 items-center justify-center"
-          onPress={() => {
-            props.onEnvironmentChange(null);
-            props.onProjectChange(null);
-          }}
+          onPress={filterControls.onReset}
         >
           <SymbolView name="xmark.circle.fill" size={18} tintColorClassName="accent-icon-muted" />
         </Pressable>
       ) : null}
-    </ScrollView>
+    </View>
   );
 }

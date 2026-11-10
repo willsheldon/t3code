@@ -1,10 +1,7 @@
 import { useActiveNewTask } from "../../state/active-new-task";
 import { ThreadUndoNotice } from "../home/ThreadUndoNotice";
 import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
-import {
-  pickableProjectGroups,
-  resolveScratchProjectScopeKey,
-} from "@t3tools/client-runtime/state/project-grouping";
+import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
 import {
   useAppearancePreferences,
   useAndroidFloatingTabs,
@@ -16,7 +13,6 @@ import type {
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
 import { AnimatedLegendList } from "@legendapp/list/reanimated";
 import { THREAD_SIDEBAR_ROW_LAYOUT } from "./threadListAnimations";
-import type { MenuAction } from "@react-native-menu/menu";
 import { useAtomValue } from "@effect/atom-react";
 import { useMemo, useRef, useState } from "react";
 import type { LayoutChangeEvent, TextInputInstance } from "react-native";
@@ -50,7 +46,15 @@ import { useThreadJumpShortcuts } from "../keyboard/threadKeyboardShortcuts";
 import { requestThreadMessageJump } from "./threadMessageJump";
 import { useThreadListSearchMatches } from "./useThreadListSearchMatches";
 import { useHomeListOptions } from "../home/home-list-options";
-import { buildHomeListFilterMenu } from "../home/home-list-filter-menu";
+import {
+  applyHomeListFilterAction,
+  buildHomeListFilterMenu,
+  buildHomeListFilterSections,
+  homeListFilterSubmenuActions,
+  isHomeListFilterCustomized,
+} from "../home/home-list-filter-menu";
+import { resolveProjectFilter, soleProjectScope } from "../home/thread-list-filters";
+import { useEnhancedThreadFilterMenu } from "../home/use-thread-list-filter-menu";
 import { buildHomeProjectScopes } from "../home/homeThreadList";
 import { SwipeableScrollGateProvider, useSwipeableScrollGate } from "../home/thread-swipe-actions";
 import { usePendingTaskListActions } from "../home/usePendingTaskListActions";
@@ -190,8 +194,14 @@ function ThreadNavigationSidebarPane(
   const availableEnvironmentIds = new Set(
     environments.map((environment) => environment.environmentId),
   );
-  const { options, setSelectedEnvironmentId, setSelectedProjectKey } =
-    useHomeListOptions(availableEnvironmentIds);
+  const {
+    options,
+    setSelectedEnvironmentId,
+    setSelectedProjectKeys,
+    setSelectedStatuses,
+    setSelectedAccountKey,
+    resetFilters,
+  } = useHomeListOptions(availableEnvironmentIds);
   const searchEnvironmentIds =
     options.selectedEnvironmentId === null
       ? workspaceEnvironments
@@ -204,12 +214,6 @@ function ThreadNavigationSidebarPane(
           )
         ? [options.selectedEnvironmentId]
         : [];
-  // A legacy per-environment scratch key resolves here on every render; the stored
-  // value is only rewritten when the user picks a filter.
-  const resolvedProjectKey = resolveScratchProjectScopeKey(options.selectedProjectKey, projects, {
-    sidebarProjectGroupingMode: options.projectGroupingMode,
-    sidebarProjectGroupingOverrides: {},
-  });
   const projectScopes = useMemo(
     () =>
       buildHomeProjectScopes({
@@ -219,10 +223,11 @@ function ThreadNavigationSidebarPane(
       }),
     [projects, options.selectedEnvironmentId, options.projectGroupingMode],
   );
-  const projectFilterOptions = pickableProjectGroups(projectScopes).map((scope) => ({
-    key: scope.key,
-    label: scope.title,
-  }));
+  const pickableScopes = useMemo(() => pickableProjectGroups(projectScopes), [projectScopes]);
+  const projectFilterOptions = useMemo(
+    () => pickableScopes.map((scope) => ({ key: scope.key, label: scope.title })),
+    [pickableScopes],
+  );
   const projectTitleByProjectKey = useMemo(
     () =>
       new Map(
@@ -238,20 +243,38 @@ function ThreadNavigationSidebarPane(
       ),
     [projectScopes],
   );
-  // An archived project's filter reads as all projects, matching the filter menu.
-  const selectedProjectScope =
-    pickableProjectGroups(projectScopes).find((scope) => scope.key === resolvedProjectKey) ?? null;
+  // A legacy per-environment scratch key resolves here on every render; the stored value is
+  // only rewritten when the user picks a filter. An archived project's filter reads as all
+  // projects, matching the filter menu.
+  const projectFilter = useMemo(
+    () =>
+      resolveProjectFilter({
+        keys: options.selectedProjectKeys,
+        projects,
+        scopes: pickableScopes,
+        projectGroupingMode: options.projectGroupingMode,
+      }),
+    [options.selectedProjectKeys, options.projectGroupingMode, pickableScopes, projects],
+  );
+  const enhancedFilter = useEnhancedThreadFilterMenu({
+    enabled: options.enhancedFilterEnabled,
+    threads,
+    environments,
+    environmentId: options.selectedEnvironmentId,
+    projectRefs: projectFilter.projectRefs,
+    statuses: options.selectedStatuses,
+    accountKey: options.selectedAccountKey,
+  });
   const threadSearch = useThreadSearch(
     searchEnvironmentIds,
     props.searchQuery,
-    selectedProjectScope === null
+    projectFilter.projectRefs === null
       ? {}
-      : { projectIds: selectedProjectScope.projectRefs.map((ref) => ref.projectId) },
+      : { projectIds: projectFilter.projectRefs.map((ref) => ref.projectId) },
   );
   // This map reaches LegendList's extraData, which re-renders every row whenever it changes
   // identity; the hook keeps it stable.
   const threadSearchMatchByKey = useThreadListSearchMatches(threads, threadSearch);
-  const selectedProjectKey = selectedProjectScope?.key ?? null;
   const projectByKey = useMemo(() => {
     const map = new Map<string, EnvironmentProject>();
     for (const project of projects) {
@@ -263,14 +286,18 @@ function ThreadNavigationSidebarPane(
   const [settledVisibleCount, setSettledVisibleCount] = useState(
     THREAD_LIST_V2_SETTLED_INITIAL_COUNT,
   );
-  const settledResetKey = `${options.selectedEnvironmentId ?? "all"}:${selectedProjectKey ?? "all"}:${props.searchQuery.trim()}`;
+  const settledResetKey = JSON.stringify([
+    options.selectedEnvironmentId,
+    projectFilter.keys,
+    options.selectedStatuses,
+    options.selectedAccountKey,
+    props.searchQuery.trim(),
+  ]);
   const [lastSettledResetKey, setLastSettledResetKey] = useState(settledResetKey);
   if (lastSettledResetKey !== settledResetKey) {
     setLastSettledResetKey(settledResetKey);
     setSettledVisibleCount(THREAD_LIST_V2_SETTLED_INITIAL_COUNT);
   }
-  const showMoreSettled = () =>
-    setSettledVisibleCount((count) => count + THREAD_LIST_V2_SETTLED_PAGE_COUNT);
   const {
     loaded: shelfPreferencesLoaded,
     settledShelfExpanded,
@@ -302,11 +329,16 @@ function ThreadNavigationSidebarPane(
     items: threadListV2Items,
     contentOnlyThreadKeys,
     olderSettledShelf,
+    filtering,
+    hasUnloadedSettled,
+    scannedSettledCount,
   } = useThreadListV2({
     threads,
     pendingTasks,
     environmentId: options.selectedEnvironmentId,
-    projectRefs: selectedProjectScope === null ? null : selectedProjectScope.projectRefs,
+    projectRefs: projectFilter.projectRefs,
+    statuses: options.selectedStatuses,
+    accountKey: options.selectedAccountKey,
     searchQuery: props.searchQuery,
     searchMatches: threadSearchMatchByKey,
     settlementEnvironmentIds,
@@ -324,8 +356,14 @@ function ThreadNavigationSidebarPane(
     settledShelfExpanded,
     selectedThreadKey: props.selectedThreadKey ?? null,
   });
+  // A filtered list pages through the settled threads it scanned, not only the matches shown.
+  const showMoreSettled = () =>
+    setSettledVisibleCount(
+      (count) =>
+        Math.max(count, filtering ? scannedSettledCount : 0) + THREAD_LIST_V2_SETTLED_PAGE_COUNT,
+    );
   const listItems: readonly SidebarListItem[] =
-    settledShelfExpanded && threadListV2Layout.hiddenSettledCount > 0
+    settledShelfExpanded && (threadListV2Layout.hiddenSettledCount > 0 || hasUnloadedSettled)
       ? [
           ...threadListV2Items,
           {
@@ -340,78 +378,30 @@ function ThreadNavigationSidebarPane(
           },
         ]
       : threadListV2Items;
-  const listMenuActions = [
-    {
-      id: "environment",
-      title: "Environment",
-      subactions: [
-        {
-          id: "environment:all",
-          title: "All environments",
-          subtitle: "Show threads from every environment",
-          state: options.selectedEnvironmentId === null ? "on" : "off",
-        },
-        ...environments.map((environment) => ({
-          id: `environment:${environment.environmentId}`,
-          title: environment.label,
-          state:
-            options.selectedEnvironmentId === environment.environmentId
-              ? ("on" as const)
-              : ("off" as const),
-        })),
-      ],
-    },
-    ...(projectFilterOptions.length === 0
-      ? []
-      : ([
-          {
-            id: "project",
-            title: "Project",
-            subactions: [
-              {
-                id: "project:all",
-                title: "All projects",
-                subtitle: "Show threads from every project",
-                state: selectedProjectKey === null ? "on" : "off",
-              },
-              ...projectFilterOptions.map((project) => ({
-                id: `project:${project.key}`,
-                title: project.label,
-                state: selectedProjectKey === project.key ? ("on" as const) : ("off" as const),
-              })),
-            ],
-          },
-        ] satisfies MenuAction[])),
-  ] satisfies MenuAction[];
+  const filterState = {
+    environments,
+    selectedEnvironmentId: options.selectedEnvironmentId,
+    projects: projectFilterOptions,
+    selectedProjectKeys: projectFilter.keys,
+    enhanced: enhancedFilter,
+    sidebar: true,
+  };
+  const filterControls = {
+    onEnvironmentChange: setSelectedEnvironmentId,
+    onProjectsChange: setSelectedProjectKeys,
+    onStatusesChange: setSelectedStatuses,
+    onAccountChange: setSelectedAccountKey,
+    onReset: resetFilters,
+  };
+  const listMenuActions = homeListFilterSubmenuActions(
+    buildHomeListFilterSections(filterState),
+    isHomeListFilterCustomized(filterState),
+  );
   const handleListMenuAction = ({
     nativeEvent,
   }: {
     readonly nativeEvent: { readonly event: string };
-  }) => {
-    const event = nativeEvent.event;
-    if (event === "environment:all") {
-      setSelectedEnvironmentId(null);
-      return;
-    }
-    if (event.startsWith("environment:")) {
-      const environment = environments.find(
-        (candidate) => String(candidate.environmentId) === event.slice("environment:".length),
-      );
-      if (environment) setSelectedEnvironmentId(environment.environmentId);
-      return;
-    }
-    if (event === "project:all") {
-      setSelectedProjectKey(null);
-      return;
-    }
-    if (event.startsWith("project:")) {
-      const projectKey = event.slice("project:".length);
-      if (projectFilterOptions.some((project) => project.key === projectKey)) {
-        setSelectedProjectKey(projectKey);
-      }
-      return;
-    }
-  };
+  }) => applyHomeListFilterAction(nativeEvent.event, filterState, filterControls);
 
   const [measuredHeaderHeight, setMeasuredHeaderHeight] = useState<number | null>(null);
   const { height, paddingTop, paddingBottom } = useToolbarLayout();
@@ -663,18 +653,11 @@ function ThreadNavigationSidebarPane(
         );
     }
   };
-  const filterCustomized = options.selectedEnvironmentId !== null || selectedProjectKey !== null;
+  const filterCustomized = isHomeListFilterCustomized(filterState);
   const filterIcon = filterCustomized
     ? "line.3.horizontal.decrease.circle.fill"
     : "line.3.horizontal.decrease.circle";
-  const filterMenu = buildHomeListFilterMenu({
-    environments,
-    projects: projectFilterOptions,
-    selectedEnvironmentId: options.selectedEnvironmentId,
-    selectedProjectKey,
-    onEnvironmentChange: setSelectedEnvironmentId,
-    onProjectChange: setSelectedProjectKey,
-  });
+  const filterMenu = buildHomeListFilterMenu(filterState, filterControls);
   const nativeHeaderItems = createSidebarHeaderItems({
     filterIcon,
     filterMenu,
@@ -696,9 +679,11 @@ function ThreadNavigationSidebarPane(
             ? threadSearch.isPending
               ? "Searching thread messages…"
               : "No matching threads"
-            : selectedProjectScope !== null
-              ? `No threads in ${selectedProjectScope.title}`
-              : "No threads yet"}
+            : filtering || projectFilter.scopes.length > 1
+              ? "No threads match filters"
+              : soleProjectScope(projectFilter.scopes) !== null
+                ? `No threads in ${soleProjectScope(projectFilter.scopes)?.title}`
+                : "No threads yet"}
     </Text>
   );
 

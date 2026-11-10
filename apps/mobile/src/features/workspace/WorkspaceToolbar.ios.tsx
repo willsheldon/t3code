@@ -1,6 +1,6 @@
 import { useActiveNewTask } from "../../state/active-new-task";
 import { Toolbar } from "../../components/ui/Toolbar";
-import { useFocusEffect, useIsFocused } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused, useNavigation } from "@react-navigation/native";
 import { use, useCallback, useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import { isDuoDevice } from "../../lib/device-type";
@@ -13,6 +13,11 @@ import {
   NativePrimaryColumnContext,
   NativeWorkspaceTabActivityContext,
 } from "../../native/v5-workspace-context";
+import {
+  homeListFilterActiveCount,
+  homeListFilterButtonLabel,
+} from "../home/home-list-filter-menu";
+import { useThreadListFilterSelection } from "../home/use-thread-list-filter-model";
 import { useHardwareKeyboardCommand } from "../keyboard/hardwareKeyboardCommands";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
 import { useWorkspaceTabs } from "./WorkspaceTabsContext";
@@ -58,6 +63,22 @@ export function WorkspaceToolbar(props: {
     tab === "settings" ? tabActive : isListTabActive(tab);
   const foldedSearch = deviceType === "duo-folded";
   const primaryColumn = use(NativePrimaryColumnContext);
+  const navigation = useNavigation();
+  const { listOptions, selectedEnvironmentId, projectFilter } = useThreadListFilterSelection();
+  // The filter sheet stands in for the chip row, which shows wherever the thread list does:
+  // not in the split view without a primary column, whose sidebar has its own menu.
+  const filterButtonShown =
+    selectedTab === "threads" &&
+    listOptions.enhancedFilterEnabled &&
+    !(layout.usesSplitView && !primaryColumn);
+  const filterActiveCount = homeListFilterActiveCount({
+    selectedEnvironmentId,
+    selectedProjectKeys: projectFilter.keys,
+    enhanced: {
+      statuses: listOptions.selectedStatuses,
+      selectedAccountKey: listOptions.selectedAccountKey,
+    },
+  });
   // UIKit hosts integrated search outside the sidebar's sliding content.
   // Mount it after native appearance so it cannot precede the pane's reveal.
   const searchVisible = foldedSearch
@@ -206,6 +227,19 @@ export function WorkspaceToolbar(props: {
               onPress={focusSearch}
             />
           )}
+          {filterButtonShown ? (
+            <Toolbar.Button
+              identifier="workspace-filters"
+              accessibilityLabel={homeListFilterButtonLabel(filterActiveCount)}
+              icon={
+                filterActiveCount > 0
+                  ? "line.3.horizontal.decrease.circle.fill"
+                  : "line.3.horizontal.decrease.circle"
+              }
+              badge={filterActiveCount}
+              onPress={() => navigation.navigate("HomeFilters")}
+            />
+          ) : null}
         </Toolbar>
       )}
       <Toolbar placement="bottom">

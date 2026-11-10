@@ -6,7 +6,6 @@ import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import {
-  EnvironmentId,
   PullRequestInvolvement,
   PullRequestListFilters,
   PullRequestListState,
@@ -22,6 +21,9 @@ import { MOBILE_THEME_IDS, type MobileThemeId, type MobileThemeMode } from "../l
 import * as MobileDatabase from "./mobile-database";
 import * as MobileSecureStorage from "./mobile-secure-storage";
 import { MobileStorageDecodeError, MobileStorageEncodeError } from "./mobile-storage";
+import { decodeStoredThreadListFilters, type ThreadListFilters } from "./thread-list-filters";
+
+export type { ThreadListFilters };
 
 const PREFERENCES_KEY = "t3code.preferences";
 const PREFERENCES_FALLBACK_KEY = "t3code.preferences.fallback";
@@ -35,12 +37,6 @@ export const PullRequestListControls = Schema.Struct({
   sort: Schema.Literals(["updated", "created", "oldest"]),
 });
 export type PullRequestListControls = typeof PullRequestListControls.Type;
-
-const ThreadListFilters = Schema.Struct({
-  environmentId: Schema.NullOr(EnvironmentId),
-  projectKey: Schema.NullOr(Schema.String),
-});
-export type ThreadListFilters = typeof ThreadListFilters.Type;
 
 const PullRequestListPreferences = Schema.Struct({
   environmentId: Schema.NullOr(Schema.String),
@@ -77,7 +73,6 @@ const WorkspaceSelections = Schema.Struct({
 });
 export type WorkspaceSelections = typeof WorkspaceSelections.Type;
 
-const isThreadListFilters = Schema.is(ThreadListFilters);
 const isWorkspaceSelections = Schema.is(WorkspaceSelections);
 const isPullRequestListPreferences = Schema.is(PullRequestListPreferences);
 const ThreadProject = Schema.Struct({
@@ -116,6 +111,8 @@ export interface Preferences {
   readonly projectGroupingMode?: SidebarProjectGroupingMode;
   readonly planModeEnabled?: boolean;
   readonly workingShelfEnabled?: boolean;
+  /** Unset means on, as the web setting does. */
+  readonly enhancedThreadFilterEnabled?: boolean;
   readonly useLastProjectForNewThreads?: boolean;
   readonly lastThreadProject?: typeof ThreadProject.Type;
   readonly modelFavorites?: ReadonlyArray<{
@@ -196,6 +193,7 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     projectGroupingMode?: SidebarProjectGroupingMode;
     planModeEnabled?: boolean;
     workingShelfEnabled?: boolean;
+    enhancedThreadFilterEnabled?: boolean;
     useLastProjectForNewThreads?: boolean;
     lastThreadProject?: typeof ThreadProject.Type;
     modelFavorites?: Preferences["modelFavorites"];
@@ -324,6 +322,9 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   if (typeof parsed.workingShelfEnabled === "boolean") {
     preferences.workingShelfEnabled = parsed.workingShelfEnabled;
   }
+  if (typeof parsed.enhancedThreadFilterEnabled === "boolean") {
+    preferences.enhancedThreadFilterEnabled = parsed.enhancedThreadFilterEnabled;
+  }
   if (typeof parsed.useLastProjectForNewThreads === "boolean") {
     preferences.useLastProjectForNewThreads = parsed.useLastProjectForNewThreads;
   }
@@ -350,8 +351,9 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   if (typeof parsed.threadListWorkingShelfExpanded === "boolean") {
     preferences.threadListWorkingShelfExpanded = parsed.threadListWorkingShelfExpanded;
   }
-  if (isThreadListFilters(parsed.threadListFilters)) {
-    preferences.threadListFilters = parsed.threadListFilters;
+  const threadListFilters = decodeStoredThreadListFilters(parsed.threadListFilters);
+  if (threadListFilters !== undefined) {
+    preferences.threadListFilters = threadListFilters;
   }
   if (isPullRequestListPreferences(parsed.pullRequestListFilters)) {
     preferences.pullRequestListFilters = parsed.pullRequestListFilters;

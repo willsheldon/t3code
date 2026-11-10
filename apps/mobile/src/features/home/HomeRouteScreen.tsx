@@ -3,24 +3,14 @@ import { ThreadUndoNotice } from "./ThreadUndoNotice";
 import { Toolbar } from "../../components/ui/Toolbar";
 import { use } from "react";
 import { NativePrimaryColumnContext } from "../../native/v5-workspace-context";
-import * as Arr from "effect/Array";
-import * as Order from "effect/Order";
 import { useNavigation } from "@react-navigation/native";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Platform, useWindowDimensions } from "react-native";
 
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import {
-  pickableProjectGroups,
-  resolveScratchProjectScopeKey,
-} from "@t3tools/client-runtime/state/project-grouping";
 
 import { NativeStackScreenOptions } from "../../native/StackHeader";
-import { useProjects } from "../../state/entities";
-import { environmentThreadShells } from "../../state/threads";
 import { usePendingNewTasks } from "../../state/use-pending-new-tasks";
-import { useWorkspaceState } from "../../state/workspace";
-import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
 import { useDeviceType, useNativeColumnLayoutMetrics } from "../../native/native-layout-metrics";
 import { WorkspaceEmptyDetail } from "../layout/WorkspaceEmptyDetail";
@@ -28,9 +18,8 @@ import { AndroidScreenHeader } from "../../components/ui/AndroidScreenHeader";
 import { AndroidHomeFabLayout } from "./AndroidHomeFab";
 import { HomeScreen } from "./HomeScreen";
 import { HomeHeader } from "./HomeHeader";
-import { useHomeListOptions } from "./home-list-options";
-import { useAtomValueWhileVisible, useHomeRouteVisible } from "./home-route-visibility";
-import { buildHomeProjectScopes } from "./homeThreadList";
+import { useHomeRouteVisible } from "./home-route-visibility";
+import { useThreadListFilterModel } from "./use-thread-list-filter-model";
 import { usePendingTaskListActions } from "./usePendingTaskListActions";
 import { useThreadListActions } from "./useThreadListActions";
 import { getConnectionAwareBrandHeaderOptions } from "./WorkspaceConnectionTitle";
@@ -48,15 +37,24 @@ export function HomeRouteScreen() {
   const { layout, panes, primarySidebarSearchQuery, setPrimarySidebarSearchQuery, startNewTask } =
     useAdaptiveWorkspaceLayout();
   const selectDetail = useSelectWorkspaceDetail();
-  const projects = useProjects();
   // Stop rebuilding the streaming thread list while Thread covers Home.
   const visible = useHomeRouteVisible();
-  const threads = useAtomValueWhileVisible(
-    environmentThreadShells.navigationThreadShellsAtom,
+  // The split view without the native primary column shows no filter menu: the sidebar owns it.
+  const showsSplitDetailOnly = layout.usesSplitView && !nativePrimaryColumn;
+  const {
+    projects,
+    threads,
+    catalogState,
+    savedConnectionsById,
+    environments,
+    listOptions,
+    selectedEnvironmentId,
+    filterState,
+    filterControls,
+  } = useThreadListFilterModel({
     visible,
-  );
-  const { environments: workspaceEnvironments, state: catalogState } = useWorkspaceState();
-  const { savedConnectionsById } = useSavedRemoteConnections();
+    menus: Platform.OS !== "ios" && !showsSplitDetailOnly,
+  });
   const navigation = useNavigation();
   const selectTab = useSelectWorkspaceTab();
   const workspace = useWorkspaceTabs();
@@ -106,60 +104,7 @@ export function HomeRouteScreen() {
   const pendingTasks = usePendingNewTasks();
   const { openPendingTask, confirmDeletePendingTask } =
     usePendingTaskListActions(selectThreadRoute);
-  const connectionStateByEnvironmentId = new Map(
-    workspaceEnvironments.map(
-      (environment) => [environment.environmentId, environment.connectionState] as const,
-    ),
-  );
-  const environments = Arr.sort(
-    Object.values(savedConnectionsById).map((connection) => ({
-      environmentId: connection.environmentId,
-      label: connection.environmentLabel,
-      connectionState: connectionStateByEnvironmentId.get(connection.environmentId) ?? "available",
-    })),
-    Order.mapInput(Order.String, (environment: { readonly label: string }) => environment.label),
-  );
-  const availableEnvironmentIds = useMemo(
-    () => new Set(environments.map((environment) => environment.environmentId)),
-    [environments],
-  );
-  const {
-    options: listOptions,
-    setSelectedEnvironmentId,
-    setSelectedProjectKey,
-  } = useHomeListOptions(availableEnvironmentIds);
-  const selectedEnvironmentId = listOptions.selectedEnvironmentId;
-  // A legacy per-environment scratch key resolves here on every render; the stored
-  // value is only rewritten when the user picks a filter.
-  const resolvedProjectKey = resolveScratchProjectScopeKey(
-    listOptions.selectedProjectKey,
-    projects,
-    {
-      sidebarProjectGroupingMode: listOptions.projectGroupingMode,
-      sidebarProjectGroupingOverrides: {},
-    },
-  );
-  const projectFilterOptions = useMemo(
-    () =>
-      pickableProjectGroups(
-        buildHomeProjectScopes({
-          projects,
-          environmentId: selectedEnvironmentId,
-          projectGroupingMode: listOptions.projectGroupingMode,
-        }),
-      ).map((scope) => ({
-        key: scope.key,
-        label: scope.title,
-      })),
-    [listOptions.projectGroupingMode, projects, selectedEnvironmentId],
-  );
-  const selectedProjectKey = projectFilterOptions.some(
-    (project) => project.key === resolvedProjectKey,
-  )
-    ? resolvedProjectKey
-    : null;
-
-  if (layout.usesSplitView && !nativePrimaryColumn) {
+  if (showsSplitDetailOnly) {
     return (
       <>
         <NativeStackScreenOptions
@@ -221,13 +166,9 @@ export function HomeRouteScreen() {
           />
         )}
         <HomeHeader
-          environments={environments}
-          projects={projectFilterOptions}
+          filterState={filterState}
+          filterControls={filterControls}
           searchQuery={searchQuery}
-          selectedEnvironmentId={selectedEnvironmentId}
-          selectedProjectKey={selectedProjectKey}
-          onEnvironmentChange={setSelectedEnvironmentId}
-          onProjectChange={setSelectedProjectKey}
           onOpenEnvironments={() => openSettings(navigation, "SettingsEnvironments")}
           onOpenSettings={() => selectTab("settings")}
           onSearchQueryChange={setSearchQuery}
@@ -250,8 +191,6 @@ export function HomeRouteScreen() {
           onMoveThread={moveThread}
           onRenameThread={renameThread}
           onRegenerateThreadTitle={regenerateThreadTitle}
-          onEnvironmentChange={setSelectedEnvironmentId}
-          onProjectChange={setSelectedProjectKey}
           onOpenSettings={() => selectTab("settings")}
           onSearchQueryChange={setSearchQuery}
           onSelectThread={handleSelectThread}
@@ -270,13 +209,13 @@ export function HomeRouteScreen() {
           }}
           onStartNewTask={startNewTask}
           pendingTasks={pendingTasks}
-          projectGroupingMode={listOptions.projectGroupingMode}
+          listOptions={listOptions}
           projects={projects}
-          projectSortOrder={listOptions.projectSortOrder}
           savedConnectionsById={savedConnectionsById}
           searchQuery={searchQuery}
           selectedEnvironmentId={selectedEnvironmentId}
-          selectedProjectKey={selectedProjectKey}
+          filterState={filterState}
+          filterControls={filterControls}
           threads={threads}
         />
         <ThreadUndoNotice visible={visible} />

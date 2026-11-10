@@ -261,6 +261,52 @@ To hide the enhanced filter, turn off **Settings → General → Enhanced thread
 filter**. The project filter button comes back and keeps your selected projects.
 Your rules are kept and come back when you turn it on again.
 
+### Filter on mobile
+
+The mobile app has the same status, account and project filters. They are a
+native sheet or menus instead of a popover, and mobile has no title rules yet.
+
+- **iPhone and iPad.** The **Filters** button beside Search in the thread list's
+  header opens a sheet with every filter, so no chip row takes room under the
+  search field. The button fills in while a filter is set, and shows how many
+  choices are set on iOS 26 and later. Each status, each project, the
+  environment and the account count as one. VoiceOver reads it as **Filters, 3
+  active**. Changes apply at once to the list behind the sheet. The sheet opens
+  at half height; drag it up for more room. Tap the close button when finished.
+- **Android.** The filter menu beside the search field holds the same filters
+  as submenus.
+- **Tablet sidebar.** The filter button in the sidebar header opens the same
+  menus as submenus.
+- **Reset.** **Reset** in the sheet header clears every filter. It is available
+  only while a filter is set. The Android filter menu and the tablet filter
+  button have a **Reset filters** entry that appears the same way.
+- **Status** shows **Input**, **Working**, **Failed** and **Done** as four
+  buttons, with how many threads each would show. Tap any number of them. A
+  selected status has a checkmark and a filled button. Done reads **40+** while
+  older settled threads are not loaded. In the Android and tablet menus, a status
+  reads such as **3 threads**, and **Clear status** appears once one is selected.
+- **Projects.** Check any number of projects. **All projects** clears the choice.
+  A project you saved before this filter existed stays selected.
+- **Environment.** Pick one environment, or **All environments**.
+- **Account** appears when you have more than one account, or one is selected.
+
+In the tablet sidebar's menus the menu stays open while you check several statuses
+or projects. On Android a menu closes after each tap, so open it again to add another.
+
+Search, the section counts, the empty message and the **Show more** row for older
+settled threads follow the filters. On a tablet the open thread stays visible. A
+task that is still being created is hidden while a status or account filter is set,
+because it has no status yet. The filters are remembered on this device.
+
+To turn the new filters off, use **Settings → General → Enhanced thread filter**.
+On iPhone, the **Filters** button goes away and the row of environment and project
+chips under the search field comes back, with an **x** after the chips that clears
+them. The environment menu and a single project choice stay, as they were. While it is
+off, picking a project replaces the saved project list with that one project.
+**Reset** clears only the environment and project. When you turn the filter on
+again, your saved status and account come back. So do your saved projects, unless
+you picked a project or used **Reset** while it was off.
+
 ## Find and reference work
 
 On web and desktop, open the command palette with `Cmd/Ctrl+K` to search threads
