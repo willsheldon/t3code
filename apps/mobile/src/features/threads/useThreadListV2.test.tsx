@@ -9,7 +9,7 @@ import { Atom, AtomRegistry } from "effect/reactivity";
 import { expect, it, vi } from "vite-plus/test";
 
 import { olderSettledThreads } from "../../state/threads";
-import { makeRawThreadShell } from "../../test-fixtures";
+import { makeRawThreadShell, makeThreadShellFixture } from "../../test-fixtures";
 import { useThreadListV2 } from "./useThreadListV2";
 
 vi.mock("../../state/threads", () => ({
@@ -45,6 +45,8 @@ it("reuses a large thread list across tab renders and updates when its inputs ch
     environmentId: null,
     projectRefs: null,
     searchQuery: "",
+    statuses: [],
+    accountKey: null,
     searchMatches: new Map(),
     settlementEnvironmentIds: environmentIds,
     snoozeEnvironmentIds: environmentIds,
@@ -241,4 +243,115 @@ it("reuses a large thread list across tab renders and updates when its inputs ch
   expect(loaded.layout.items).toHaveLength(160);
   expect(loaded.olderSettledShelf.isListed(threads[150]!)).toBe(true);
   expect(loaded.items).not.toBe(loading.items);
+});
+
+it("lists only the threads a status and account filter keeps, and leaves unloaded history out of the count", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  using _globals = { [Symbol.dispose]: () => vi.unstubAllGlobals() };
+  const environmentId = EnvironmentId.make("environment-1");
+  const before = "2026-01-01T12:00:00.000Z";
+  const shelf = new Map<EnvironmentId, OlderSettledShelfEnvironment>([
+    [
+      environmentId,
+      {
+        older: {
+          before,
+          beforeMs: Date.parse(before),
+          counts: new Map([[ProjectId.make("project-test"), 40]]),
+        },
+        pages: { reads: [], frontier: null, status: "ready" },
+      },
+    ],
+  ]);
+  const shelfAtom = Atom.make<ReadonlyMap<EnvironmentId, OlderSettledShelfEnvironment>>(shelf);
+  vi.mocked(olderSettledThreads.shelfAtom).mockReturnValue(shelfAtom);
+  const registry = AtomRegistry.make();
+  using _registry = { [Symbol.dispose]: () => registry.dispose() };
+  const make = (id: string, overrides: Parameters<typeof makeThreadShellFixture>[0]) =>
+    makeThreadShellFixture({ environmentId, id: ThreadId.make(id), title: id, ...overrides });
+  const working = { runtime: { status: "running", activeRunId: null } as never };
+  const threads = [
+    make("working-1", working),
+    make("working-2", working),
+    make("input-1", { hasPendingUserInput: true }),
+    make("settled-1", { settledOverride: "settled" }),
+  ];
+  const environmentIds = new Set([environmentId]);
+  const input: Parameters<typeof useThreadListV2>[0] = {
+    threads,
+    pendingTasks: [
+      {
+        kind: "draft",
+        key: "draft-1",
+        environmentId,
+        projectId: ProjectId.make("project-test"),
+        title: "Draft",
+        createdAt: before,
+      } as never,
+    ],
+    environmentId: null,
+    projectRefs: null,
+    searchQuery: "",
+    statuses: [],
+    accountKey: null,
+    searchMatches: new Map(),
+    settlementEnvironmentIds: environmentIds,
+    snoozeEnvironmentIds: environmentIds,
+    pinReorderEnvironmentIds: environmentIds,
+    activeReorderEnvironmentIds: environmentIds,
+    queuedThreadKeys: new Set(),
+    settledLimit: 10,
+    now: "2026-01-02T00:00:00.000Z",
+    pendingOrder: null,
+    shelfPreferencesLoaded: true,
+    workingShelfEnabled: false,
+    workingShelfExpanded: false,
+    snoozedShelfExpanded: false,
+    settledShelfExpanded: true,
+    selectedThreadKey: null,
+  };
+  const seen: Array<ReturnType<typeof useThreadListV2>> = [];
+  function Probe(props: { input: typeof input }) {
+    const result = useThreadListV2(props.input);
+    useLayoutEffect(() => {
+      seen.push(result);
+    });
+    return null;
+  }
+  const root = createRoot(document.createElement("div"));
+  using _root = { [Symbol.dispose]: () => act(() => root.unmount()) };
+  const render = (next: typeof input) =>
+    act(async () =>
+      root.render(
+        <RegistryContext value={registry}>
+          <Probe input={next} />
+        </RegistryContext>,
+      ),
+    );
+  const titles = () =>
+    seen
+      .at(-1)!
+      .layout.items.map((item) => item.thread.title)
+      .sort();
+
+  await render(input);
+  expect(titles()).toEqual(["input-1", "settled-1", "working-1", "working-2"]);
+  expect(seen.at(-1)!.layout.settledCount).toBe(41);
+  expect(seen.at(-1)!.items.some((item) => item.type === "v2-pending")).toBe(true);
+  expect(seen.at(-1)!.filtering).toBe(false);
+  expect(seen.at(-1)!.hasUnloadedSettled).toBe(false);
+
+  await render({ ...input, statuses: ["working"] });
+  expect(titles()).toEqual(["working-1", "working-2"]);
+  // The 40 older settled threads cannot be judged until loaded, so they are not counted.
+  expect(seen.at(-1)!.layout.settledCount).toBe(0);
+  expect(seen.at(-1)!.hasUnloadedSettled).toBe(true);
+  // A task still being created has no status to match.
+  expect(seen.at(-1)!.items.some((item) => item.type === "v2-pending")).toBe(false);
+
+  await render({ ...input, statuses: ["working"], selectedThreadKey: `${environmentId}:input-1` });
+  expect(titles()).toEqual(["input-1", "working-1", "working-2"]);
+
+  await render({ ...input, accountKey: JSON.stringify([environmentId, "other-account"]) });
+  expect(titles()).toEqual([]);
 });

@@ -10,10 +10,7 @@ import { useMemo, useState } from "react";
 import { Platform, useWindowDimensions } from "react-native";
 
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import {
-  pickableProjectGroups,
-  resolveScratchProjectScopeKey,
-} from "@t3tools/client-runtime/state/project-grouping";
+import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
 
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { useProjects } from "../../state/entities";
@@ -29,6 +26,8 @@ import { AndroidHomeFabLayout } from "./AndroidHomeFab";
 import { HomeScreen } from "./HomeScreen";
 import { HomeHeader } from "./HomeHeader";
 import { useHomeListOptions } from "./home-list-options";
+import { resolveProjectFilter } from "./thread-list-filters";
+import { useEnhancedThreadFilterMenu } from "./use-thread-list-filter-menu";
 import { useAtomValueWhileVisible, useHomeRouteVisible } from "./home-route-visibility";
 import { buildHomeProjectScopes } from "./homeThreadList";
 import { usePendingTaskListActions } from "./usePendingTaskListActions";
@@ -126,20 +125,13 @@ export function HomeRouteScreen() {
   const {
     options: listOptions,
     setSelectedEnvironmentId,
-    setSelectedProjectKey,
+    setSelectedProjectKeys,
+    setSelectedStatuses,
+    setSelectedAccountKey,
+    resetFilters,
   } = useHomeListOptions(availableEnvironmentIds);
   const selectedEnvironmentId = listOptions.selectedEnvironmentId;
-  // A legacy per-environment scratch key resolves here on every render; the stored
-  // value is only rewritten when the user picks a filter.
-  const resolvedProjectKey = resolveScratchProjectScopeKey(
-    listOptions.selectedProjectKey,
-    projects,
-    {
-      sidebarProjectGroupingMode: listOptions.projectGroupingMode,
-      sidebarProjectGroupingOverrides: {},
-    },
-  );
-  const projectFilterOptions = useMemo(
+  const projectScopes = useMemo(
     () =>
       pickableProjectGroups(
         buildHomeProjectScopes({
@@ -147,17 +139,48 @@ export function HomeRouteScreen() {
           environmentId: selectedEnvironmentId,
           projectGroupingMode: listOptions.projectGroupingMode,
         }),
-      ).map((scope) => ({
-        key: scope.key,
-        label: scope.title,
-      })),
+      ),
     [listOptions.projectGroupingMode, projects, selectedEnvironmentId],
   );
-  const selectedProjectKey = projectFilterOptions.some(
-    (project) => project.key === resolvedProjectKey,
-  )
-    ? resolvedProjectKey
-    : null;
+  const projectFilterOptions = useMemo(
+    () => projectScopes.map((scope) => ({ key: scope.key, label: scope.title })),
+    [projectScopes],
+  );
+  // A legacy per-environment scratch key resolves here on every render; the stored
+  // value is only rewritten when the user picks a filter.
+  const projectFilter = useMemo(
+    () =>
+      resolveProjectFilter({
+        keys: listOptions.selectedProjectKeys,
+        projects,
+        scopes: projectScopes,
+        projectGroupingMode: listOptions.projectGroupingMode,
+      }),
+    [listOptions.projectGroupingMode, listOptions.selectedProjectKeys, projectScopes, projects],
+  );
+  const enhancedFilter = useEnhancedThreadFilterMenu({
+    enabled: listOptions.enhancedFilterEnabled,
+    threads,
+    environments,
+    environmentId: selectedEnvironmentId,
+    projectRefs: projectFilter.projectRefs,
+    statuses: listOptions.selectedStatuses,
+    accountKey: listOptions.selectedAccountKey,
+  });
+  const filterState = {
+    environments,
+    selectedEnvironmentId,
+    projects: projectFilterOptions,
+    selectedProjectKeys: projectFilter.keys,
+    enhanced: enhancedFilter,
+  };
+  const filterControls = {
+    onEnvironmentChange: setSelectedEnvironmentId,
+    onProjectsChange: setSelectedProjectKeys,
+    onStatusesChange: setSelectedStatuses,
+    onAccountChange: setSelectedAccountKey,
+    onReset: resetFilters,
+  };
 
   if (layout.usesSplitView && !nativePrimaryColumn) {
     return (
@@ -221,13 +244,9 @@ export function HomeRouteScreen() {
           />
         )}
         <HomeHeader
-          environments={environments}
-          projects={projectFilterOptions}
+          filterState={filterState}
+          filterControls={filterControls}
           searchQuery={searchQuery}
-          selectedEnvironmentId={selectedEnvironmentId}
-          selectedProjectKey={selectedProjectKey}
-          onEnvironmentChange={setSelectedEnvironmentId}
-          onProjectChange={setSelectedProjectKey}
           onOpenEnvironments={() => openSettings(navigation, "SettingsEnvironments")}
           onOpenSettings={() => selectTab("settings")}
           onSearchQueryChange={setSearchQuery}
@@ -250,8 +269,6 @@ export function HomeRouteScreen() {
           onMoveThread={moveThread}
           onRenameThread={renameThread}
           onRegenerateThreadTitle={regenerateThreadTitle}
-          onEnvironmentChange={setSelectedEnvironmentId}
-          onProjectChange={setSelectedProjectKey}
           onOpenSettings={() => selectTab("settings")}
           onSearchQueryChange={setSearchQuery}
           onSelectThread={handleSelectThread}
@@ -276,7 +293,8 @@ export function HomeRouteScreen() {
           savedConnectionsById={savedConnectionsById}
           searchQuery={searchQuery}
           selectedEnvironmentId={selectedEnvironmentId}
-          selectedProjectKey={selectedProjectKey}
+          filterState={filterState}
+          filterControls={filterControls}
           threads={threads}
         />
         <ThreadUndoNotice visible={visible} />

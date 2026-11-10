@@ -261,6 +261,38 @@ To hide the enhanced filter, turn off **Settings → General → Enhanced thread
 filter**. The project filter button comes back and keeps your selected projects.
 Your rules are kept and come back when you turn it on again.
 
+### Filter on mobile
+
+The mobile app has the same status, account and project filters. They are native
+menus instead of a popover, and mobile has no title rules yet.
+
+- **Phone.** The row under the thread list's search holds a chip per filter:
+  **Status**, **Account**, a project chip and an environment chip. On Android the
+  same filters are in the filter menu beside the search field. A chip shows the
+  selection, such as **Working, Failed** or **3 projects**. The **x** at the end of
+  the row clears every filter.
+- **Tablet.** The filter button in the sidebar header opens the same menus as
+  submenus.
+- **Status** lists **Input**, **Working**, **Failed** and **Done** with how many
+  threads each would show, such as **3 threads**. Done reads **40+ threads** while
+  older settled threads are not loaded. **Clear status** appears once one is
+  selected.
+- **Projects.** Check any number of projects. **All projects** clears the choice.
+  A project you saved before this filter existed stays selected.
+- **Account** appears when you have more than one account, or one is selected.
+
+On iOS the menu stays open while you check several statuses or projects. On
+Android a menu closes after each tap, so open it again to add another.
+
+Search, the section counts, the empty message and the **Show more** row for older
+settled threads follow the filters. On a tablet the open thread stays visible. A
+task that is still being created is hidden while a status or account filter is set,
+because it has no status yet. The filters are remembered on this device.
+
+To turn the new filters off, use **Settings → General → Enhanced thread filter**.
+The environment menu and a single project choice stay, as they were. Your saved
+status, account and projects come back when you turn it on again.
+
 ## Find and reference work
 
 On web and desktop, open the command palette with `Cmd/Ctrl+K` to search threads

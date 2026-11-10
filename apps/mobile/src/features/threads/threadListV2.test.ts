@@ -1,6 +1,7 @@
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
 import { createInboxReturnTracker } from "@t3tools/client-runtime/state/thread-inbox";
 import { presentThreadShell } from "@t3tools/client-runtime/state/models";
+import { hasUnseenCompletion } from "@t3tools/client-runtime/state/thread-filters";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
 import { planPinnedReorder } from "@t3tools/client-runtime/state/thread-sort";
@@ -40,7 +41,6 @@ import {
   resolveThreadListV2WokeAt,
   sortThreadsForListV2,
   threadListV2ListItemsAreEqual,
-  threadHasUnseenCompletion,
   type ThreadListV2ListItem,
 } from "./threadListV2";
 
@@ -155,7 +155,7 @@ describe("resolveThreadListV2Status", () => {
       );
 
       expect(resolveThreadListV2Status(thread)).toBe(status);
-      expect(threadHasUnseenCompletion(thread)).toBe(true);
+      expect(hasUnseenCompletion(thread)).toBe(true);
     },
   );
 });

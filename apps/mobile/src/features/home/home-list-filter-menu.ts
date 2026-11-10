@@ -1,4 +1,15 @@
+import type { MenuAction } from "@react-native-menu/menu";
+import {
+  THREAD_FILTER_STATUS_OPTIONS,
+  UNAVAILABLE_ACCOUNT_LABEL,
+  threadFilterStatusOption,
+  toggleThreadFilterStatus,
+  type ThreadFilterStatus,
+  type ThreadFilterStatusCounts,
+} from "@t3tools/client-runtime/state/thread-filters";
 import type { EnvironmentId } from "@t3tools/contracts";
+
+import { toggleProjectKey, type ThreadListAccountOption } from "./thread-list-filters";
 
 export interface HomeListFilterMenuEnvironment {
   readonly environmentId: EnvironmentId;
@@ -10,11 +21,260 @@ export interface HomeListFilterMenuProject {
   readonly label: string;
 }
 
+/** What the status and account menus need; absent while the enhanced filter is off. */
+export interface HomeListFilterMenuEnhanced {
+  readonly statuses: ReadonlyArray<ThreadFilterStatus>;
+  /** Null until counted; the subtitles are left out then. */
+  readonly statusCounts: ThreadFilterStatusCounts | null;
+  /** Older settled threads are not loaded, so the Done count is a lower bound. */
+  readonly doneHasMore: boolean;
+  readonly accountOptions: ReadonlyArray<ThreadListAccountOption>;
+  readonly selectedAccountKey: string | null;
+}
+
+export interface HomeListFilterMenuState {
+  readonly environments: ReadonlyArray<HomeListFilterMenuEnvironment>;
+  readonly selectedEnvironmentId: EnvironmentId | null;
+  readonly projects: ReadonlyArray<HomeListFilterMenuProject>;
+  /** Several with the enhanced filter on; at most one without it. */
+  readonly selectedProjectKeys: ReadonlyArray<string>;
+  readonly enhanced: HomeListFilterMenuEnhanced | null;
+}
+
+export interface HomeListFilterMenuHandlers {
+  readonly onEnvironmentChange: (environmentId: EnvironmentId | null) => void;
+  readonly onProjectsChange: (projectKeys: ReadonlyArray<string>) => void;
+  readonly onStatusesChange: (statuses: ReadonlyArray<ThreadFilterStatus>) => void;
+  readonly onAccountChange: (accountKey: string | null) => void;
+}
+
+/** The handlers plus the control that clears every filter. */
+export interface HomeListFilterControls extends HomeListFilterMenuHandlers {
+  readonly onReset: () => void;
+}
+
+/** Whether any filter narrows the list, which the reset control and the filter icon show. */
+export const isHomeListFilterCustomized = (state: HomeListFilterMenuState): boolean =>
+  state.selectedEnvironmentId !== null ||
+  state.selectedProjectKeys.length > 0 ||
+  (state.enhanced !== null &&
+    (state.enhanced.statuses.length > 0 || state.enhanced.selectedAccountKey !== null));
+
+export interface HomeListFilterMenuEntry {
+  /** Prefixed by its menu: `environment:`, `project:`, `status:` or `account:`. */
+  readonly id: string;
+  readonly title: string;
+  readonly subtitle?: string;
+  readonly state?: "on" | "off";
+  /** A toggle in a multi-select menu: iOS keeps the menu open for the next tap. */
+  readonly keepsMenuPresented?: boolean;
+}
+
+export interface HomeListFilterMenuSection {
+  readonly id: "environment" | "project" | "status" | "account";
+  readonly title: string;
+  readonly entries: ReadonlyArray<HomeListFilterMenuEntry>;
+}
+
+const onOff = (on: boolean) => (on ? ("on" as const) : ("off" as const));
+
+function countSubtitle(count: number, more: boolean): string {
+  return `${count}${more ? "+" : ""} ${count === 1 && !more ? "thread" : "threads"}`;
+}
+
+/** The menus in the order the chips and the submenus list them. */
+export function buildHomeListFilterSections(
+  state: HomeListFilterMenuState,
+): ReadonlyArray<HomeListFilterMenuSection> {
+  const { enhanced } = state;
+  const sections: HomeListFilterMenuSection[] = [
+    {
+      id: "environment",
+      title: "Environment",
+      entries: [
+        {
+          id: "environment:all",
+          title: "All environments",
+          subtitle: "Show threads from every environment",
+          state: onOff(state.selectedEnvironmentId === null),
+        },
+        ...state.environments.map((environment) => ({
+          id: `environment:${environment.environmentId}`,
+          title: environment.label,
+          state: onOff(environment.environmentId === state.selectedEnvironmentId),
+        })),
+      ],
+    },
+  ];
+  if (state.projects.length > 0) {
+    sections.push({
+      id: "project",
+      title: "Project",
+      entries: [
+        {
+          id: "project:all",
+          title: "All projects",
+          subtitle: "Show threads from every project",
+          state: onOff(state.selectedProjectKeys.length === 0),
+        },
+        ...state.projects.map((project) => ({
+          id: `project:${project.key}`,
+          title: project.label,
+          state: onOff(state.selectedProjectKeys.includes(project.key)),
+          ...(enhanced === null ? {} : { keepsMenuPresented: true }),
+        })),
+      ],
+    });
+  }
+  if (enhanced === null) return sections;
+
+  sections.push({
+    id: "status",
+    title: "Status",
+    entries: [
+      ...THREAD_FILTER_STATUS_OPTIONS.map((option) => {
+        const count = enhanced.statusCounts?.[option.value];
+        return {
+          id: `status:${option.value}`,
+          title: option.label,
+          ...(count === undefined
+            ? {}
+            : { subtitle: countSubtitle(count, option.value === "done" && enhanced.doneHasMore) }),
+          state: onOff(enhanced.statuses.includes(option.value)),
+          keepsMenuPresented: true,
+        };
+      }),
+      ...(enhanced.statuses.length === 0 ? [] : [{ id: "status:clear", title: "Clear status" }]),
+    ],
+  });
+  const accountMissing =
+    enhanced.selectedAccountKey !== null &&
+    !enhanced.accountOptions.some((option) => option.key === enhanced.selectedAccountKey);
+  if (enhanced.accountOptions.length > 1 || enhanced.selectedAccountKey !== null) {
+    sections.push({
+      id: "account",
+      title: "Account",
+      entries: [
+        {
+          id: "account:all",
+          title: "All accounts",
+          state: onOff(enhanced.selectedAccountKey === null),
+        },
+        ...enhanced.accountOptions.map((option) => ({
+          id: `account:${option.key}`,
+          title: option.label,
+          state: onOff(option.key === enhanced.selectedAccountKey),
+        })),
+        ...(accountMissing && enhanced.selectedAccountKey !== null
+          ? [
+              {
+                id: `account:${enhanced.selectedAccountKey}`,
+                title: UNAVAILABLE_ACCOUNT_LABEL,
+                state: "on" as const,
+              },
+            ]
+          : []),
+      ],
+    });
+  }
+  return sections;
+}
+
+/** Runs the entry with this id; an id the menu does not offer does nothing. */
+export function applyHomeListFilterAction(
+  id: string,
+  state: HomeListFilterMenuState,
+  handlers: HomeListFilterMenuHandlers,
+): void {
+  const { enhanced } = state;
+  if (id === "environment:all") return handlers.onEnvironmentChange(null);
+  if (id.startsWith("environment:")) {
+    const environment = state.environments.find(
+      (candidate) => String(candidate.environmentId) === id.slice("environment:".length),
+    );
+    if (environment) handlers.onEnvironmentChange(environment.environmentId);
+    return;
+  }
+  if (id === "project:all") return handlers.onProjectsChange([]);
+  if (id.startsWith("project:")) {
+    const key = id.slice("project:".length);
+    if (!state.projects.some((project) => project.key === key)) return;
+    // Without the enhanced filter a pick replaces the choice, as it always did.
+    handlers.onProjectsChange(
+      enhanced === null ? [key] : toggleProjectKey(state.selectedProjectKeys, key),
+    );
+    return;
+  }
+  if (enhanced === null) return;
+  if (id === "status:clear") return handlers.onStatusesChange([]);
+  if (id.startsWith("status:")) {
+    const status = THREAD_FILTER_STATUS_OPTIONS.find(
+      (option) => option.value === id.slice("status:".length),
+    );
+    if (status)
+      handlers.onStatusesChange(toggleThreadFilterStatus(enhanced.statuses, status.value));
+    return;
+  }
+  if (id === "account:all") return handlers.onAccountChange(null);
+  if (id.startsWith("account:")) {
+    const key = id.slice("account:".length);
+    if (enhanced.accountOptions.some((option) => option.key === key)) handlers.onAccountChange(key);
+  }
+}
+
+export function homeListFilterMenuActions(
+  entries: ReadonlyArray<HomeListFilterMenuEntry>,
+): MenuAction[] {
+  return entries.map((entry) => ({
+    id: entry.id,
+    title: entry.title,
+    ...(entry.subtitle === undefined ? {} : { subtitle: entry.subtitle }),
+    ...(entry.state === undefined ? {} : { state: entry.state }),
+    ...(entry.keepsMenuPresented ? { attributes: { keepsMenuPresented: true } } : {}),
+  }));
+}
+
+/** The menus as nested actions, for the Android toolbar menu. */
+export function homeListFilterSubmenuActions(
+  sections: ReadonlyArray<HomeListFilterMenuSection>,
+): MenuAction[] {
+  return sections.map((section) => ({
+    id: section.id,
+    title: section.title,
+    subactions: homeListFilterMenuActions(section.entries),
+  }));
+}
+
+/** The label a chip or filter button shows for the selected statuses. */
+export function statusFilterLabel(statuses: ReadonlyArray<ThreadFilterStatus>): string {
+  if (statuses.length === 0) return "Status";
+  const joined = statuses.map((status) => threadFilterStatusOption(status).label).join(", ");
+  return joined.length > 18 ? `${statuses.length} statuses` : joined;
+}
+
+export function projectFilterLabel(
+  projects: ReadonlyArray<HomeListFilterMenuProject>,
+  selectedKeys: ReadonlyArray<string>,
+): string {
+  const selected = projects.filter((project) => selectedKeys.includes(project.key));
+  if (selected.length === 0) return "All projects";
+  return selected.length === 1 ? selected[0]!.label : `${selected.length} projects`;
+}
+
+export function accountFilterLabel(enhanced: HomeListFilterMenuEnhanced): string {
+  if (enhanced.selectedAccountKey === null) return "Account";
+  return (
+    enhanced.accountOptions.find((option) => option.key === enhanced.selectedAccountKey)?.label ??
+    UNAVAILABLE_ACCOUNT_LABEL
+  );
+}
+
 type HomeListFilterMenuAction = {
   readonly type: "action";
   readonly title: string;
   readonly subtitle?: string;
   readonly state?: "on" | "off";
+  readonly keepsMenuPresented?: boolean;
   readonly onPress: () => void;
 };
 
@@ -29,63 +289,24 @@ export interface HomeListFilterMenu {
   readonly items: Array<HomeListFilterMenuAction | HomeListFilterMenuSubmenu>;
 }
 
-export function buildHomeListFilterMenu(props: {
-  readonly environments: ReadonlyArray<HomeListFilterMenuEnvironment>;
-  readonly projects: ReadonlyArray<HomeListFilterMenuProject>;
-  readonly selectedEnvironmentId: EnvironmentId | null;
-  readonly selectedProjectKey: string | null;
-  readonly onEnvironmentChange: (environmentId: EnvironmentId | null) => void;
-  readonly onProjectChange: (projectKey: string | null) => void;
-}): HomeListFilterMenu {
-  const items: Array<HomeListFilterMenuAction | HomeListFilterMenuSubmenu> = [];
-
-  items.push({
-    type: "submenu",
-    title: "Environment",
-    items: [
-      {
-        type: "action",
-        title: "All environments",
-        subtitle: "Show threads from every environment",
-        state: props.selectedEnvironmentId === null ? "on" : "off",
-        onPress: () => props.onEnvironmentChange(null),
-      },
-      ...props.environments.map((environment) => ({
-        type: "action" as const,
-        title: environment.label,
-        state:
-          props.selectedEnvironmentId === environment.environmentId
-            ? ("on" as const)
-            : ("off" as const),
-        onPress: () => props.onEnvironmentChange(environment.environmentId),
-      })),
-    ],
-  });
-
-  if (props.projects.length > 0) {
-    items.push({
-      type: "submenu",
-      title: "Project",
-      items: [
-        {
-          type: "action",
-          title: "All projects",
-          subtitle: "Show threads from every project",
-          state: props.selectedProjectKey === null ? "on" : "off",
-          onPress: () => props.onProjectChange(null),
-        },
-        ...props.projects.map((project) => ({
-          type: "action" as const,
-          title: project.label,
-          state: props.selectedProjectKey === project.key ? ("on" as const) : ("off" as const),
-          onPress: () => props.onProjectChange(project.key),
-        })),
-      ],
-    });
-  }
-
+/** The menus as native header items, for the iOS sidebar. */
+export function buildHomeListFilterMenu(
+  state: HomeListFilterMenuState,
+  handlers: HomeListFilterMenuHandlers,
+): HomeListFilterMenu {
   return {
     title: "Thread list options",
-    items,
+    items: buildHomeListFilterSections(state).map((section) => ({
+      type: "submenu" as const,
+      title: section.title,
+      items: section.entries.map((entry) => ({
+        type: "action" as const,
+        title: entry.title,
+        ...(entry.subtitle === undefined ? {} : { subtitle: entry.subtitle }),
+        ...(entry.state === undefined ? {} : { state: entry.state }),
+        ...(entry.keepsMenuPresented ? { keepsMenuPresented: true } : {}),
+        onPress: () => applyHomeListFilterAction(entry.id, state, handlers),
+      })),
+    })),
   };
 }

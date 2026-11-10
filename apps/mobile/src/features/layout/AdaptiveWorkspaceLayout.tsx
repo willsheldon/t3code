@@ -205,6 +205,7 @@ export function AdaptiveWorkspaceLayout(props: {
       {...props}
       projectGroupingMode={groupingSettings.sidebarProjectGroupingMode}
       savedThreadListFilters={preferencesResult.value.threadListFilters}
+      enhancedThreadFilterEnabled={preferencesResult.value.enhancedThreadFilterEnabled !== false}
     />
   );
 }
@@ -220,6 +221,7 @@ function AdaptiveWorkspaceLayoutContent(
   } & {
     readonly projectGroupingMode: SidebarProjectGroupingMode;
     readonly savedThreadListFilters?: ThreadListFilters | undefined;
+    readonly enhancedThreadFilterEnabled?: boolean;
   },
 ) {
   const floatingTabsEnabled = useAndroidFloatingTabs();
@@ -893,6 +895,7 @@ function AdaptiveWorkspaceLayoutContent(
       <HomeListOptionsProvider
         projectGroupingMode={projectGroupingMode}
         savedFilters={props.savedThreadListFilters}
+        enhancedFilterEnabled={props.enhancedThreadFilterEnabled ?? true}
       >
         <AdaptiveWorkspaceContext value={contextValue}>
           <NativeWorkspaceInspectorContext
@@ -1078,6 +1081,7 @@ function AdaptiveWorkspaceLayoutContent(
     <HomeListOptionsProvider
       projectGroupingMode={projectGroupingMode}
       savedFilters={props.savedThreadListFilters}
+      enhancedFilterEnabled={props.enhancedThreadFilterEnabled ?? true}
     >
       <AdaptiveWorkspaceContext.Provider value={contextValue}>
         <WindowHingeContext value={windowHinge}>
