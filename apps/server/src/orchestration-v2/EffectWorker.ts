@@ -386,6 +386,17 @@ export const layerExecutor: Layer.Layer<
                     }),
                 ),
               );
+          case "runtime-request.detach":
+            return runtimeRequests.detach({ ...effect.request, threadId: effect.threadId }).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new OrchestrationEffectExecutionError({
+                    effectId: effect.id,
+                    effectType: effect.request.type,
+                    cause,
+                  }),
+              ),
+            );
           case "runtime-request.respond": {
             const requestId = effect.request.requestId;
             return runtimeRequests

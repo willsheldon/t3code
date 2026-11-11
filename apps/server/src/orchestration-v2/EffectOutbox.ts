@@ -76,6 +76,14 @@ export const OrchestrationEffectRequestV2 = Schema.Union([
     ),
   }),
   Schema.Struct({
+    type: Schema.Literal("runtime-request.detach"),
+    providerSessionId: ProviderSessionId,
+    providerThreadId: ProviderThreadId,
+    providerTurnId: ProviderTurnId,
+    runId: RunId,
+    requestId: RuntimeRequestId,
+  }),
+  Schema.Struct({
     type: Schema.Literal("runtime-request.respond"),
     providerSessionId: ProviderSessionId,
     requestId: RuntimeRequestId,
@@ -141,6 +149,7 @@ export const PROCESS_BOUND_EFFECT_TYPES = [
   "provider-turn.steer",
   "provider-turn.restart",
   "runtime-request.respond",
+  "runtime-request.detach",
 ] as const satisfies ReadonlyArray<OrchestrationEffectRequestV2["type"]>;
 
 export const OrchestrationEffectStatusV2 = Schema.Literals([

@@ -10730,6 +10730,67 @@ describe("ClaudeAdapterV2 background wake turns", () => {
     ),
   );
 
+  it.effect("releases a detached question without fabricating an answer", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const harness = yield* makeWakeHarness;
+        yield* harness.runtime.startTurn(
+          makeClaudeTestTurnInput({
+            threadId: harness.threadId,
+            providerThread: harness.providerThread,
+            now: yield* DateTime.now,
+            attemptId: RunAttemptId.make("attempt-detach-question"),
+            text: "Ask",
+            attachments: [],
+            runtimePolicy: ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
+              runtimeMode: "full-access",
+              interactionMode: "default",
+              cwd: "/workspace",
+            }),
+          }),
+        );
+        const ask = (requestId: string, signal = new AbortController().signal) =>
+          Effect.promise(() =>
+            harness.getOpenedOptions()!.canUseTool!(
+              "AskUserQuestion",
+              { questions: [{ question: "Which target?", header: "Target", options: [] }] },
+              { signal, toolUseID: requestId, requestId },
+            ),
+          ).pipe(Effect.forkScoped);
+        const permission = yield* ask("question-detach");
+        const request = (yield* Queue.take(harness.runtimeRequestReceipts)).runtimeRequest;
+        const target = {
+          requestId: request.id,
+          providerThread: harness.providerThread,
+          providerTurnId: request.providerTurnId!,
+        };
+        // @effect-diagnostics-next-line abortControllerInEffect:off - Simulate SDK withdrawal independently of the test fiber.
+        const withdrawal = new AbortController();
+        const other = yield* ask("other-question", withdrawal.signal);
+        yield* Queue.take(harness.runtimeRequestReceipts);
+        assert.isFalse(yield* harness.runtime.canDetachUserInput!(target));
+        withdrawal.abort();
+        yield* Fiber.join(other);
+        assert.isTrue(yield* harness.runtime.canDetachUserInput!(target));
+        yield* harness.runtime.detachUserInput!(target);
+        const result = yield* Fiber.join(permission);
+        assert.equal(result?.behavior, "deny");
+        assert.isTrue(result?.behavior === "deny" && result.message.includes("later turn"));
+        assert.isFalse(yield* harness.runtime.canDetachUserInput!(target));
+        yield* harness.runtime.detachUserInput!(target);
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            IdAllocator.layer,
+            McpProviderSessions.layer,
+            NodeServices.layer,
+            NodeCrypto.layer,
+          ),
+        ),
+      ),
+    ),
+  );
+
   it.effect.each([
     { card: "an approval", toolName: "Bash", toolInput: { command: "echo probe" } },
     {

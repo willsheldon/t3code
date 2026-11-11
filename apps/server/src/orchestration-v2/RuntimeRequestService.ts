@@ -1,6 +1,9 @@
 import {
   ProviderApprovalDecision,
   ProviderSessionId,
+  ProviderThreadId,
+  ProviderTurnId,
+  RunId,
   ProviderUserInputAnswers,
   RuntimeRequestId,
   ThreadId,
@@ -49,6 +52,14 @@ export class RuntimeRequestResponseExecutionError extends Schema.TaggedError<Run
 const isRuntimeRequestResponseExecutionError = Schema.is(RuntimeRequestResponseExecutionError);
 
 export interface RuntimeRequestServiceV2Shape {
+  readonly detach: (input: {
+    readonly threadId: ThreadId;
+    readonly providerSessionId: ProviderSessionId;
+    readonly providerThreadId: ProviderThreadId;
+    readonly providerTurnId: ProviderTurnId;
+    readonly runId: RunId;
+    readonly requestId: RuntimeRequestId;
+  }) => Effect.Effect<void, RuntimeRequestResponseExecutionError>;
   readonly respond: (input: {
     readonly threadId: ThreadId;
     readonly providerSessionId: ProviderSessionId;
@@ -75,6 +86,64 @@ export const layer: Layer.Layer<
     const sessions = yield* ProviderSessionManager.ProviderSessionManagerV2;
 
     return RuntimeRequestServiceV2.of({
+      detach: Effect.fn("RuntimeRequestService.detach")(
+        function* (input) {
+          const load = Effect.fn("RuntimeRequestService.detachTarget")(function* () {
+            const context = yield* projections.getProviderControlContext(input.threadId, input);
+            const { runs } = yield* projections.getThreadRecords(input.threadId, ["runs"], {
+              runIds: [input.runId],
+            });
+            return { ...context, run: runs[0] };
+          });
+          const owns = (context: Effect.Success<ReturnType<typeof load>>) =>
+            context.run?.id === input.runId &&
+            (context.run.status === "running" || context.run.status === "waiting") &&
+            context.providerTurn?.id === input.providerTurnId &&
+            context.providerTurn.status === "running" &&
+            context.providerTurn.providerThreadId === input.providerThreadId &&
+            context.providerTurn.runAttemptId === context.run.activeAttemptId &&
+            context.run.providerThreadId === input.providerThreadId &&
+            context.providerThread?.id === input.providerThreadId &&
+            context.providerThread.providerSessionId === input.providerSessionId;
+          const context = yield* load();
+          if (!owns(context)) return;
+          const session = yield* sessions.get(input.providerSessionId);
+          if (Option.isNone(session) || session.value.detachUserInput === undefined) return;
+          yield* session.value
+            .detachUserInput({
+              providerThread: context.providerThread!,
+              providerTurnId: input.providerTurnId,
+              requestId: input.requestId,
+            })
+            .pipe(
+              Effect.catch((cause) =>
+                Effect.gen(function* () {
+                  const current = yield* load();
+                  if (!owns(current)) return;
+                  yield* Effect.logWarning(
+                    "Question release failed; interrupting its original turn",
+                    { requestId: input.requestId, cause },
+                  );
+                  yield* session.value.interruptTurn({
+                    providerThread: current.providerThread!,
+                    providerTurnId: input.providerTurnId,
+                  });
+                }),
+              ),
+            );
+        },
+        (effect, input) =>
+          effect.pipe(
+            Effect.mapError(
+              (cause) =>
+                new RuntimeRequestResponseExecutionError({
+                  ...input,
+                  reason: "unexpected-failure",
+                  cause,
+                }),
+            ),
+          ),
+      ),
       respond: Effect.fn("RuntimeRequestService.respond")(
         function* (input) {
           const request = yield* projections.getRuntimeRequest(input.threadId, input.requestId);
