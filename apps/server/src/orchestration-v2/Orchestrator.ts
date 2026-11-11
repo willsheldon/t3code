@@ -9918,49 +9918,16 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       }
       if (runtimeRequest.responseCapability.type === "message") {
         if (resolvedNodeStatus === "cancelled") return;
-        let dispatchMode: Extract<
-          OrchestrationV2Command,
-          { type: "message.dispatch" }
-        >["dispatchMode"] = {
-          type: "queue_after_active",
-        };
-        const {
-          run: activeRun,
-          providerThread: activeProviderThread,
-          providerTurn: activeProviderTurn,
-        } = yield* projectionStore
-          .getRunningTurnContext(command.threadId)
-          .pipe(mapDispatchError(command));
-        if (activeRun && activeProviderTurn && activeProviderThread?.providerSessionId) {
-          const activeSession = yield* providerSessions
-            .get(activeProviderThread.providerSessionId)
-            .pipe(
-              Effect.mapError(
-                (cause) =>
-                  new OrchestratorDispatchError({
-                    commandId: command.commandId,
-                    commandType: command.type,
-                    cause,
-                  }),
-              ),
-            );
-          if (
-            Option.isSome(activeSession) &&
-            activeSession.value.providerSession.capabilities.turns.supportsActiveSteering
-          ) {
-            dispatchMode = { type: "steer_active", targetRunId: activeRun.id };
-          }
-        }
         const answer = {
           type: "message.dispatch" as const,
           commandId: command.commandId,
           threadId: command.threadId,
           messageId: MessageId.make(`async-answer:${command.requestId}`),
-          text: replies.join("\n\n"),
+          text: `Card ID: ${command.requestId}\n\n${replies.join("\n\n")}`,
           attachments: [],
           createdBy: "user" as const,
           creationSource: "server" as const,
-          dispatchMode,
+          dispatchMode: { type: "queue_after_active" as const },
         };
         yield* dispatchMessage(answer, events, effects);
         return yield* recordSubagentFollowup(answer, events).pipe(mapDispatchError(answer));
@@ -11238,6 +11205,14 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         .filter((subagent) => subagent.origin === "app_owned")
         .map((subagent) => subagent.id),
     );
+    const detachedQuestionNodeIds = new Set(
+      input.projection.runtimeRequests
+        .filter(
+          (request) =>
+            request.kind === "user_input" && request.responseCapability.type === "message",
+        )
+        .map((request) => request.nodeId),
+    );
     const cascaded = yield* RunExecutionService.cascadeTerminalizeRunOwnedSubagents({
       run,
       status: "interrupted",
@@ -11255,7 +11230,12 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         ),
         nodes: new Map(
           input.projection.nodes
-            .filter((node) => node.runId === run.id && !delegatedNodeIds.has(node.id))
+            .filter(
+              (node) =>
+                node.runId === run.id &&
+                !delegatedNodeIds.has(node.id) &&
+                (node.id === run.rootNodeId || !detachedQuestionNodeIds.has(node.id)),
+            )
             .map((node) => [node.id, node]),
         ),
         turnItems: new Map(),
@@ -11275,6 +11255,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     for (const request of input.projection.runtimeRequests) {
       if (
         request.status !== "pending" ||
+        detachedQuestionNodeIds.has(request.nodeId) ||
         !input.projection.nodes.some((node) => node.id === request.nodeId && node.runId === run.id)
       )
         continue;
