@@ -95,6 +95,8 @@ export function makeSubagentChildThread(input: {
     autoSettleDisabledAt: null,
     // A guest link belongs to the thread it was made for.
     guestShare: null,
+    // A task names the thread waiting on it, so a copy would answer to the wrong thread.
+    operatorTasks: undefined,
     lastVisitedAt: null,
     deletedAt: null,
   };

@@ -48,7 +48,11 @@ export function decideOperatorTaskCommand(input: {
 }): Result.Result<OperatorTaskDecision, string> {
   const { thread, command, now } = input;
   const nowIso = DateTime.formatIso(now);
-  const tasks = thread.operatorTasks ?? [];
+  // A payload copied from another thread brings that thread's items; they are not this thread's
+  // to act on, and the next write drops them.
+  const tasks = (thread.operatorTasks ?? []).filter(
+    (candidate) => candidate.threadId === thread.id,
+  );
   const task =
     "taskId" in command ? tasks.find((candidate) => candidate.id === command.taskId) : undefined;
 

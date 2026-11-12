@@ -6,6 +6,7 @@ import {
   RunId,
   RunAttemptId,
   MessageId,
+  OperatorTaskId,
   EventId,
   TurnItemId,
   type OrchestrationV2Run,
@@ -123,6 +124,41 @@ it("keeps a subagent child awake when its parent thread is snoozed", () => {
     type: "node",
     nodeId: parentNodeId,
   });
+});
+
+it("starts a subagent child without the parent's operator tasks", () => {
+  const operatorTasks = [
+    {
+      id: OperatorTaskId.make("task:subagent-parent"),
+      threadId: parentThreadId,
+      projectId: ProjectId.make("project:subagent-snooze"),
+      createdByThreadId: parentThreadId,
+      action: "Run the migration",
+      instructions: "",
+      dueAt: null,
+      state: "open" as const,
+      closeReason: null,
+      doneAt: null,
+      doneDelivery: null,
+      createdAt: "2026-07-24T09:01:00.000Z",
+      updatedAt: "2026-07-24T09:01:00.000Z",
+    },
+  ];
+  const childThread = makeSubagentChildThread({
+    parentThread: { ...makeParentThread(), operatorTasks },
+    childThreadId,
+    parentNodeId: NodeId.make("node:subagent-parent"),
+    activeProviderThreadId: null,
+    providerInstanceId: childProviderInstanceId,
+    modelSelection: childModelSelection,
+    title: "Child",
+    now: childCreatedAt,
+    createdBy: "agent",
+    creationSource: "provider",
+  });
+
+  // A task names the thread waiting on it, so a copy would answer to the wrong thread.
+  assert.isUndefined(childThread.operatorTasks);
 });
 
 it.effect.each(["provider", "mcp"] as const)(

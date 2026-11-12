@@ -214,6 +214,38 @@ describe("decideOperatorTaskCommand add", () => {
   });
 });
 
+describe("decideOperatorTaskCommand foreign items", () => {
+  // A thread payload copied from another thread brings that thread's items with it.
+  const copied = (): OrchestrationV2AppThread => {
+    const task = taskOf(
+      ok(decide(makeThread(), add("seed", "task:foreign"))).thread,
+      "task:foreign",
+    );
+    return makeThread({
+      id: otherThreadId,
+      operatorTasks: [{ ...task, threadId: threadId }],
+    });
+  };
+
+  it("does not act on an item that belongs to another thread", () => {
+    fail(decide(copied(), { ...done("c1", "task:foreign"), threadId: otherThreadId }));
+    fail(
+      decide(copied(), {
+        ...update("c2", "task:foreign", threadId, { close: { reason: "x" } }),
+        threadId: otherThreadId,
+      }),
+    );
+  });
+
+  it("drops such an item on the thread's next task write", () => {
+    const next = ok(decide(copied(), { ...add("c1", "task:own"), threadId: otherThreadId })).thread;
+    assert.deepEqual(
+      next.operatorTasks?.map((task) => task.id),
+      ["task:own"],
+    );
+  });
+});
+
 describe("decideOperatorTaskCommand update", () => {
   const withTask = () => ok(decide(makeThread(), add("c1", "task:1"))).thread;
 
