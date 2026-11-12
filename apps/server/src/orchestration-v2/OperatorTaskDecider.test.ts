@@ -195,16 +195,17 @@ describe("decideOperatorTaskCommand add", () => {
   it("bounds the instruction text a thread holds, so its payload stays small", () => {
     const withText = (thread: OrchestrationV2AppThread, id: string, length: number) =>
       decide(thread, add(`c-${id}`, `task:${id}`, { instructions: "x".repeat(length) }));
-    const chunk = OPERATOR_TASK_TEXT_LIMIT / 8;
+    // Nine open items just under the cap; one edit within the schema's per-item limit passes it.
     let thread = makeThread();
-    for (let index = 0; index < 8; index += 1) {
-      thread = ok(withText(thread, `open-${index}`, chunk)).thread;
+    for (let index = 0; index < 9; index += 1) {
+      thread = ok(withText(thread, `open-${index}`, 7_100)).thread;
     }
     // Open items are never dropped to make room.
-    assert.include(fail(withText(thread, "over", 1)), "too much text");
-    const edit = update("c-edit", "task:open-0", threadId, { instructions: "x".repeat(chunk + 1) });
+    assert.include(fail(withText(thread, "over", 1_000)), "too much text");
+    const edit = update("c-edit", "task:open-0", threadId, { instructions: "x".repeat(8_000) });
     assert.include(fail(decide(thread, edit)), "too much text");
-    // Done frees nothing it needs: it never fails for text.
+    // Shrinking and Done never fail for text.
+    ok(decide(thread, update("c-shrink", "task:open-0", threadId, { instructions: "x" })));
     ok(decide(thread, done("c-done", "task:open-0")));
   });
 

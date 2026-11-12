@@ -79,7 +79,9 @@ export function decideOperatorTaskCommand(input: {
       chars -= candidate.instructions.length;
     }
     if (chars > OPERATOR_TASK_TEXT_LIMIT)
-      return Result.fail("This thread's tasks hold too much text.");
+      return Result.fail(
+        "This thread's tasks hold too much text. Close or shorten open tasks first.",
+      );
     return Result.succeed<OperatorTaskDecision>({
       thread: {
         ...thread,
