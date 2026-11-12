@@ -7506,19 +7506,20 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
 
     const listOperatorTasks = Effect.fn("ProjectionStore.listOperatorTasks")(function* () {
       const rows = yield* sql<{
+        readonly thread_id: string;
         readonly project_id: string;
         readonly title: string;
         readonly archived_at: string | null;
         readonly task_json: string;
       }>`
-        SELECT t.project_id, t.title, t.archived_at, j.value AS task_json
+        SELECT t.thread_id, t.project_id, t.title, t.archived_at, j.value AS task_json
         FROM orchestration_v2_projection_threads AS t,
           json_each(t.payload_json, '$.operatorTasks') AS j
         WHERE t.deleted_at IS NULL
           AND instr(t.payload_json, '"operatorTasks"') > 0
           AND json_extract(j.value, '$.threadId') = t.thread_id
       `;
-      return yield* Effect.forEach(rows, (row) =>
+      const decoded = yield* Effect.forEach(rows, (row) =>
         decodeOperatorTaskPayload(row.task_json).pipe(
           Effect.map((task): ProjectionOperatorTask => ({
             task,
@@ -7526,8 +7527,15 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             threadTitle: row.title,
             threadArchived: row.archived_at !== null,
           })),
+          // One bad item must not hide every other thread's tasks.
+          Effect.catch(() =>
+            Effect.logWarning("Skipping an operator task that does not decode", {
+              threadId: row.thread_id,
+            }).pipe(Effect.as(null)),
+          ),
         ),
       );
+      return decoded.filter((entry) => entry !== null);
     }, Effect.mapError(shellSnapshotReadError));
 
     const findGuestShareThreadId = Effect.fn("ProjectionStore.findGuestShareThreadId")(function* (

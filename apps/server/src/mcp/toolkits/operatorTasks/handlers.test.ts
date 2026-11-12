@@ -168,6 +168,20 @@ describe("operator task toolkit handlers", () => {
     }),
   );
 
+  it.effect("adds only as the calling thread, whatever else the call carries", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness();
+      yield* harness.call("my_task_add", {
+        action: "Run the migration",
+        actorThreadId: OTHER,
+        createdByThreadId: OTHER,
+      } as never);
+      expect(yield* Ref.get(harness.calls)).toEqual([
+        { method: "add", input: { actorThreadId: CALLER, action: "Run the migration" } },
+      ]);
+    }),
+  );
+
   it.effect("refuses writes from a client outside any thread, and from a delegated child", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness();
@@ -204,7 +218,10 @@ describe("operator task toolkit handlers", () => {
   it.effect("reports a missing thread or task with a matching code", () =>
     Effect.gen(function* () {
       const missingThread = yield* makeHarness({
-        fail: new OperatorTaskError({ message: "Thread thread:nope was not found." }),
+        fail: new OperatorTaskError({
+          message: "Thread thread:nope was not found.",
+          reason: "thread_not_found",
+        }),
       });
       expect(
         yield* missingThread.call("my_task_add", {
@@ -213,7 +230,10 @@ describe("operator task toolkit handlers", () => {
         }),
       ).toMatchObject({ code: "thread_not_found" });
       const missingTask = yield* makeHarness({
-        fail: new OperatorTaskError({ message: "Task task:one does not exist." }),
+        fail: new OperatorTaskError({
+          message: "Task task:one does not exist.",
+          reason: "task_not_found",
+        }),
       });
       expect(
         yield* missingTask.call("my_task_update", {

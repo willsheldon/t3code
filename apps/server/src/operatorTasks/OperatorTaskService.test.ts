@@ -116,6 +116,7 @@ it.effect("lets a thread add for another thread, which then owns the item", () =
       .update({ actorThreadId: other, taskId: added.id, close: { reason: "mine" } })
       .pipe(Effect.flip);
     assert.include(refused.message, "does not exist");
+    assert.equal(refused.reason, "task_not_found");
     const closed = yield* service.update({
       actorThreadId: owner,
       taskId: added.id,
@@ -133,6 +134,7 @@ it.effect("rejects an unknown thread and a deleted thread", () =>
       .add({ actorThreadId: owner, threadId: ThreadId.make("thread:nope"), action: "x" })
       .pipe(Effect.flip);
     assert.include(unknown.message, "was not found");
+    assert.equal(unknown.reason, "thread_not_found");
     yield* orchestrator.dispatch({
       type: "thread.delete",
       commandId: CommandId.make("delete-other"),
@@ -226,6 +228,24 @@ it.effect(
     }).pipe(Effect.provide(layerTest)),
 );
 
+it.effect("lists the other items when one stored item does not decode", () =>
+  Effect.gen(function* () {
+    const service = yield* setup;
+    const sql = yield* SqlClient.SqlClient;
+    const good = yield* service.add({ actorThreadId: other, action: "Fine" });
+    yield* service.add({ actorThreadId: owner, action: "Will break" });
+    yield* sql`
+      UPDATE orchestration_v2_projection_threads
+      SET payload_json = json_set(payload_json, '$.operatorTasks[0].state', 'sideways')
+      WHERE thread_id = ${owner}
+    `;
+    assert.deepEqual(
+      (yield* service.list()).tasks.map((task) => task.id),
+      [good.id],
+    );
+  }).pipe(Effect.provide(layerTest)),
+);
+
 it.effect("sends one message per Done through the service and reopens an item", () =>
   Effect.gen(function* () {
     const service = yield* setup;
@@ -262,6 +282,7 @@ it.effect("sends one message per Done through the service and reopens an item", 
       })
       .pipe(Effect.flip);
     assert.include(missing.message, "does not exist");
+    assert.equal(missing.reason, "task_not_found");
   }).pipe(Effect.provide(layerTest)),
 );
 
@@ -286,16 +307,19 @@ it.effect("streams the list, then each change to it, and skips repeats", () =>
     });
     assert.equal((yield* Queue.take(lists)).tasks[0]?.state, "done");
     const orchestrator = yield* Orchestrator.OrchestratorV2;
+    // Touches the thread, so the stream looks again, but nothing the list shows changes.
+    yield* orchestrator.dispatch({
+      type: "thread.metadata.update",
+      commandId: CommandId.make("branch-owner"),
+      threadId: owner,
+      branch: "feature/unlisted",
+    });
     yield* orchestrator.dispatch({
       type: "thread.archive",
       commandId: CommandId.make("archive-owner"),
       threadId: owner,
     });
+    // The next list is the archive, not a repeat of the one before it.
     assert.isTrue((yield* Queue.take(lists)).tasks[0]?.threadArchived);
-    assert.isNull(
-      yield* Queue.poll(lists).pipe(
-        Effect.map((item) => (item._tag === "Some" ? item.value : null)),
-      ),
-    );
   }).pipe(Effect.provide(layerTest)),
 );

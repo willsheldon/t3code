@@ -48,7 +48,7 @@ const UpdateInput = Schema.Struct({
 
 const MyTaskAddTool = Tool.make("my_task_add", {
   description:
-    "Record an action only the operator can do: a person-only step, or a gate they own. It appears on their My tasks page. Start `action` with a verb. Put steps in `instructions` as Markdown, commands in fenced blocks. When the operator marks it done, a message comes back to the waiting thread. Do not add an item you can do yourself.",
+    "Record an action only the operator can do: a person-only step, or a gate they own. It appears on their My tasks page. Start `action` with a verb. Put steps in `instructions` as Markdown, commands in fenced blocks. When the operator marks it done, a message comes back to the waiting thread. Do not add an item you can do yourself. Check `my_task_list` first and update an existing item instead of adding a second one.",
   parameters: AddInput,
   success: OperatorTaskEntry,
   failure: OrchestratorMcpFailure,

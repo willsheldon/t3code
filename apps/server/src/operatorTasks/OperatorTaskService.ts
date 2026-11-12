@@ -69,8 +69,16 @@ export class OperatorTaskService extends Context.Service<
 
 const encodeListJson = Schema.encodeEffect(Schema.fromJsonString(OperatorTaskListResult));
 
-const failure = (message: string, cause?: unknown) =>
-  new OperatorTaskError({ message, ...(cause === undefined ? {} : { cause }) });
+const failure = (
+  message: string,
+  cause?: unknown,
+  reason?: "thread_not_found" | "task_not_found",
+) =>
+  new OperatorTaskError({
+    message,
+    ...(reason === undefined ? {} : { reason }),
+    ...(cause === undefined ? {} : { cause }),
+  });
 
 /** Events that change what the list shows: its items, or the thread fields it joins. */
 const affectsList = ({ event }: OrchestrationV2StoredEvent): boolean => {
@@ -138,7 +146,7 @@ const make = Effect.gen(function* () {
           .pipe(Effect.mapError((cause) => failure("Could not follow your tasks.", cause)));
         const first = yield* list();
         const last = yield* Ref.make(yield* encodeList(first));
-        const changes = eventSink.stream({ afterSequence: after }).pipe(
+        const changes = eventSink.stream({ afterSequence: after, bounded: true }).pipe(
           Stream.mapError((cause) => failure("Could not follow your tasks.", cause)),
           Stream.filter(affectsList),
           Stream.mapEffect(() => list()),
@@ -160,7 +168,7 @@ const make = Effect.gen(function* () {
   ) {
     const { tasks } = yield* list({ threadId });
     const entry = tasks.find((candidate) => candidate.id === taskId);
-    return entry ?? (yield* failure(`Task ${taskId} does not exist.`));
+    return entry ?? (yield* failure(`Task ${taskId} does not exist.`, undefined, "task_not_found"));
   });
 
   const dispatch = (command: OperatorTaskCommand) =>
@@ -181,7 +189,23 @@ const make = Effect.gen(function* () {
       .getThreadShell(threadId)
       .pipe(Effect.mapError((cause) => failure("Could not read the thread.", cause)));
     if (shell === null || shell.deletedAt !== null) {
-      return yield* failure(`Thread ${threadId} was not found.`);
+      return yield* failure(`Thread ${threadId} was not found.`, undefined, "thread_not_found");
+    }
+  });
+
+  /** Fails early and plainly for an id that is not this thread's, as for one that never existed. */
+  const requireTask = Effect.fn("OperatorTaskService.requireTask")(function* (
+    threadId: ThreadId,
+    taskId: OperatorTaskId,
+  ) {
+    yield* requireLiveThread(threadId);
+    const thread = yield* projections
+      .getThread(threadId)
+      .pipe(Effect.mapError((cause) => failure("Could not read the thread.", cause)));
+    if (
+      !(thread.operatorTasks ?? []).some((task) => task.id === taskId && task.threadId === threadId)
+    ) {
+      return yield* failure(`Task ${taskId} does not exist.`, undefined, "task_not_found");
     }
   });
 
@@ -206,6 +230,7 @@ const make = Effect.gen(function* () {
 
   const update: OperatorTaskService["Service"]["update"] = Effect.fn("OperatorTaskService.update")(
     function* (input) {
+      yield* requireTask(input.actorThreadId, input.taskId);
       yield* dispatch({
         type: "thread.operator-task.update",
         commandId: CommandId.make(yield* newId("server:operator-task-update")),
@@ -224,7 +249,10 @@ const make = Effect.gen(function* () {
   const operatorAction =
     (type: "thread.operator-task.done" | "thread.operator-task.reopen") =>
     (input: OperatorTaskActionInput) =>
-      dispatch({ type, ...input }).pipe(Effect.andThen(entryOf(input.threadId, input.taskId)));
+      requireTask(input.threadId, input.taskId).pipe(
+        Effect.andThen(dispatch({ type, ...input })),
+        Effect.andThen(entryOf(input.threadId, input.taskId)),
+      );
 
   return OperatorTaskService.of({
     list,

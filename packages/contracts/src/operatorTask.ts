@@ -113,6 +113,8 @@ export class OperatorTaskError extends Schema.TaggedError<OperatorTaskError>()(
   "OperatorTaskError",
   {
     message: Schema.String,
+    /** Set when the thread or the item is missing, so callers need not read the message. */
+    reason: Schema.optional(Schema.Literals(["thread_not_found", "task_not_found"])),
     cause: Schema.optional(Schema.Defect()),
   },
 ) {}

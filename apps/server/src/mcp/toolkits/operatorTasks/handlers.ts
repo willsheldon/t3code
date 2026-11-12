@@ -20,14 +20,7 @@ const callerThread = Effect.fn("OperatorTasksToolkit.callerThread")(function* (o
 });
 
 const failure = (error: OperatorTaskError) =>
-  new OrchestratorMcpFailure({
-    code: error.message.includes("was not found")
-      ? "thread_not_found"
-      : error.message.includes("does not exist")
-        ? "task_not_found"
-        : "invalid_request",
-    message: error.message,
-  });
+  new OrchestratorMcpFailure({ code: error.reason ?? "invalid_request", message: error.message });
 
 const handlers = {
   my_task_add: McpToolAccess.writesThreads(
@@ -36,7 +29,7 @@ const handlers = {
       Effect.gen(function* () {
         const actorThreadId = yield* callerThread("my_task_add");
         const service = yield* OperatorTaskService.OperatorTaskService;
-        return yield* service.add({ actorThreadId, ...input }).pipe(Effect.mapError(failure));
+        return yield* service.add({ ...input, actorThreadId }).pipe(Effect.mapError(failure));
       }),
   ),
   my_task_update: McpToolAccess.actsAsCaller((input) =>
