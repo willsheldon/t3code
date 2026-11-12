@@ -5,6 +5,7 @@ import {
   EnvironmentId,
   MessageId,
   type ModelSelection,
+  OperatorTaskId,
   type OrchestrationV2AppThread,
   type OrchestrationV2Run,
   type OrchestrationV2ThreadProjection,
@@ -188,6 +189,37 @@ it.effect("resets a fork's pin, snooze, settle and delegation state but keeps it
       threadId: sourceThreadId,
       runId: sourceRunId,
     });
+  }),
+);
+
+it.effect("does not copy the source thread's operator tasks to a fork", () =>
+  Effect.gen(function* () {
+    const sourceRun = makeSourceRun("completed");
+    const operatorTasks = [
+      {
+        id: OperatorTaskId.make("task:fork-source"),
+        threadId: sourceThreadId,
+        createdByThreadId: sourceThreadId,
+        action: "Run the migration",
+        instructions: "",
+        dueAt: null,
+        state: "open" as const,
+        closeReason: null,
+        doneAt: null,
+        doneDelivery: null,
+        createdAt: "2026-07-24T09:01:00.000Z",
+        updatedAt: "2026-07-24T09:01:00.000Z",
+      },
+    ];
+    const sourceProjection = {
+      ...makeSourceProjection(sourceRun),
+      thread: { ...makeSourceThread(), operatorTasks },
+    };
+    const result = yield* planFork(sourceRun, sourceProjection);
+
+    // A task names the thread waiting on it; a copy would answer to the wrong thread.
+    assert.isUndefined(result.targetThread.operatorTasks);
+    assert.deepEqual(sourceProjection.thread.operatorTasks, operatorTasks);
   }),
 );
 

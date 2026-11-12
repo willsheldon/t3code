@@ -26,6 +26,7 @@ import {
   hasUnknownUnionTag,
   isUnknownUnionMember,
   NonNegativeInt,
+  OperatorTaskId,
   PlanId,
   PositiveInt,
   ProjectId,
@@ -44,6 +45,12 @@ import {
 import { AuthMcpClientAccess } from "./auth.ts";
 import { ChatAttachment } from "./chatAttachment.ts";
 import { ThreadGuestShare } from "./guestShare.ts";
+import {
+  OperatorTask,
+  OperatorTaskAction,
+  OperatorTaskCloseReason,
+  OperatorTaskInstructions,
+} from "./operatorTask.ts";
 import { StoredThreadTags, ThreadTag } from "./threadTags.ts";
 import {
   OrchestrationSearchThreadsInput,
@@ -487,6 +494,8 @@ export const OrchestrationV2AppThread = Schema.Struct({
   lastSnoozeWakeAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   limitRecovery: Schema.optional(Schema.NullOr(OrchestrationV2LimitRecovery)),
   guestShare: Schema.optional(Schema.NullOr(ThreadGuestShare)),
+  /** Operator tasks this thread is waiting on. Absent on threads that never had one. */
+  operatorTasks: Schema.optional(Schema.Array(OperatorTask)),
   pinnedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   autoSettleDisabledAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   pinOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
@@ -1921,6 +1930,7 @@ export const OrchestrationV2DomainEvent = Schema.Union([
       "thread.model-selection-updated",
       "thread.provider-switched",
       "thread.guest-share-updated",
+      "thread.operator-tasks-updated",
     ]),
     payload: OrchestrationV2AppThread,
   }),
@@ -2815,6 +2825,7 @@ export const OrchestrationV2DomainEventJson = Schema.Union([
       "thread.model-selection-updated",
       "thread.provider-switched",
       "thread.guest-share-updated",
+      "thread.operator-tasks-updated",
     ]),
     payload: OrchestrationV2AppThreadJson,
   }),
@@ -3416,6 +3427,43 @@ export type OrchestrationV2Command = typeof OrchestrationV2Command.Type;
 
 // Excluded from dispatchCommand so only the server can send these.
 const OrchestrationV2InternalCommand = Schema.Union([
+  // Operator task commands. Only the server sends these: it sets who is asking from the MCP
+  // caller or the authenticated operator RPC, never from tool or client input.
+  Schema.Struct({
+    type: Schema.Literal("thread.operator-task.add"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    taskId: OperatorTaskId,
+    action: OperatorTaskAction,
+    instructions: Schema.optional(OperatorTaskInstructions),
+    dueAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+    createdByThreadId: Schema.NullOr(ThreadId),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("thread.operator-task.update"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    taskId: OperatorTaskId,
+    /** The thread asking. Only the item's owning thread may change it. */
+    actorThreadId: ThreadId,
+    action: Schema.optional(OperatorTaskAction),
+    instructions: Schema.optional(OperatorTaskInstructions),
+    dueAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+    close: Schema.optional(Schema.Struct({ reason: OperatorTaskCloseReason })),
+  }),
+  /** The operator's click. Marks the item done and queues one message to the thread. */
+  Schema.Struct({
+    type: Schema.Literal("thread.operator-task.done"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    taskId: OperatorTaskId,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("thread.operator-task.reopen"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    taskId: OperatorTaskId,
+  }),
   // Guest share commands the server issues after checking T3 Connect and the guest token.
   Schema.Struct({
     type: Schema.Literal("thread.guest-share.open"),
