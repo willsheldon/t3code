@@ -32,6 +32,7 @@ import {
   type SidebarSection,
   resolveSidebarDropVerb,
   groupSidebarThreadsByProject,
+  groupSidebarThreadsByProjectPinnedFirst,
   resolveSidebarFolderDot,
   sidebarFolderExpansionKeys,
 } from "./Sidebar.logic";
@@ -1601,6 +1602,46 @@ describe("groupSidebarThreadsByProject", () => {
       { projectKey: "t3code", threads: ["a", "b"] },
       { projectKey: "fleet", threads: [] },
     ]);
+  });
+});
+
+describe("groupSidebarThreadsByProjectPinnedFirst", () => {
+  const fleet = ProjectId.make("fleet");
+  const notes = ProjectId.make("notes");
+  const thread = (id: string, projectId: ProjectId) => ({
+    id,
+    environmentId: localEnvironmentId,
+    projectId,
+  });
+  const groups = [
+    {
+      projectKey: "fleet",
+      memberProjectRefs: [{ environmentId: localEnvironmentId, projectId: fleet }],
+    },
+  ];
+  const run = (pinned: ReturnType<typeof thread>[], active: ReturnType<typeof thread>[]) => {
+    const result = groupSidebarThreadsByProjectPinnedFirst(groups, pinned, active, () => false);
+    return {
+      folders: result.folders.map((folder) => folder.threads.map((entry) => entry.id)),
+      pinned: result.pinned.map((entry) => entry.id),
+    };
+  };
+
+  it("puts pinned threads first in their folder, keeping both orders", () => {
+    expect(
+      run([thread("pm", fleet), thread("pm2", fleet)], [thread("w1", fleet), thread("w2", fleet)]),
+    ).toEqual({ folders: [["pm", "pm2", "w1", "w2"]], pinned: [] });
+  });
+
+  it("keeps a pinned thread without a folder in the pinned list", () => {
+    expect(run([thread("lost", notes), thread("pm", fleet)], [thread("w1", fleet)])).toEqual({
+      folders: [["pm", "w1"]],
+      pinned: ["lost"],
+    });
+  });
+
+  it("makes a folder for a project that has only pinned threads", () => {
+    expect(run([thread("pm", fleet)], [])).toEqual({ folders: [["pm"]], pinned: [] });
   });
 });
 

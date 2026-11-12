@@ -175,7 +175,7 @@ import {
 import {
   applySidebarThreadDrop,
   filterSidebarV2VisibleThreads,
-  groupSidebarThreadsByProject,
+  groupSidebarThreadsByProjectPinnedFirst,
   sidebarFolderExpansionKeys,
   isSidebarHiddenThread,
   buildBulkTitleRegenerationContextMenuItem,
@@ -621,10 +621,21 @@ function useSidebarThreads(input: {
   const visibleWorkingThreads = workingShelfExpanded
     ? workingThreads
     : routeThreadOnly(workingThreads, routeRowThreadKey);
-  const projectFolders =
+  const grouped =
     folderGroups === null
       ? null
-      : groupSidebarThreadsByProject(folderGroups, activeThreads, keepEmpty).map((folder) => {
+      : groupSidebarThreadsByProjectPinnedFirst(
+          folderGroups,
+          pinnedThreads,
+          activeThreads,
+          keepEmpty,
+        );
+  // In boring mode pinned threads sit in their project's folder; only the rest stay pinned.
+  const shownPinnedThreads = grouped === null ? pinnedThreads : grouped.pinned;
+  const projectFolders =
+    grouped === null
+      ? null
+      : grouped.folders.map((folder) => {
           const collapsed = !resolveProjectExpanded(
             projectExpandedById,
             sidebarFolderExpansionKeys(folder.group),
@@ -642,7 +653,7 @@ function useSidebarThreads(input: {
           };
         });
   const orderedThreads = [
-    ...pinnedThreads,
+    ...shownPinnedThreads,
     ...(projectFolders === null
       ? activeThreads
       : projectFolders.flatMap((folder) => folder.threads)),
@@ -662,6 +673,7 @@ function useSidebarThreads(input: {
   }
   return {
     ...partition,
+    pinnedThreads: shownPinnedThreads,
     threads,
     workingShelfEnabled,
     searchableThreads: [

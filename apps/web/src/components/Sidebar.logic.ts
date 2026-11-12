@@ -1029,6 +1029,41 @@ export function groupSidebarThreadsByProject<
   return folders.filter((folder) => folder.threads.length > 0 || keepEmpty(folder.group));
 }
 
+/**
+ * Boring mode: puts each pinned thread at the top of its project's folder, in pinned order, ahead
+ * of the folder's other threads. A pinned thread whose project has no folder stays in `pinned`.
+ */
+export function groupSidebarThreadsByProjectPinnedFirst<
+  TGroup extends {
+    readonly memberProjectRefs: ReadonlyArray<{
+      readonly environmentId: EnvironmentId;
+      readonly projectId: string;
+    }>;
+  },
+  TThread extends Pick<SidebarThreadSummary, "environmentId" | "projectId">,
+>(
+  groups: readonly TGroup[],
+  pinned: readonly TThread[],
+  active: readonly TThread[],
+  keepEmpty: (group: TGroup) => boolean,
+): { folders: Array<{ group: TGroup; threads: TThread[] }>; pinned: TThread[] } {
+  const folderProjects = new Set(
+    groups.flatMap((group) =>
+      group.memberProjectRefs.map((ref) => `${ref.environmentId}:${ref.projectId}`),
+    ),
+  );
+  const inFolder = (thread: TThread) =>
+    folderProjects.has(`${thread.environmentId}:${thread.projectId}`);
+  return {
+    folders: groupSidebarThreadsByProject(
+      groups,
+      [...pinned.filter(inFolder), ...active],
+      keepEmpty,
+    ),
+    pinned: pinned.filter((thread) => !inFolder(thread)),
+  };
+}
+
 export type SidebarV2TopStatusKind =
   | "approval"
   | "done"
