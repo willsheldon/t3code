@@ -8,11 +8,13 @@ import {
   ProviderInstanceId,
   ThreadId,
 } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
@@ -125,6 +127,8 @@ it.effect("adds an item once, however many times the same command or id is repla
     const orchestrator = yield* setup;
     const projections = yield* ProjectionStore.ProjectionStoreV2;
     const before = yield* projections.getThreadProjection(owner);
+    // The test clock stands still, so move it: a bump to updatedAt must show.
+    yield* TestClock.adjust("1 minute");
     yield* addTask(orchestrator);
     yield* addTask(orchestrator);
     assert.isTrue(
@@ -134,6 +138,14 @@ it.effect("adds an item once, however many times the same command or id is repla
     assert.lengthOf(after.thread.operatorTasks ?? [], 1);
     assert.equal(after.thread.operatorTasks?.[0]?.state, "open");
     assert.equal(after.thread.updatedAt.toString(), before.thread.updatedAt.toString());
+    assert.isAbove(
+      Date.parse(after.thread.operatorTasks![0]!.createdAt),
+      DateTime.toEpochMillis(before.thread.updatedAt),
+    );
+    assert.equal(
+      (yield* projections.getThreadShell(owner))?.updatedAt.toString(),
+      (yield* projections.getThreadShell(owner))?.createdAt.toString(),
+    );
   }).pipe(Effect.provide(layerTest)),
 );
 
@@ -235,6 +247,24 @@ it.effect("keeps a close that was recorded when Done comes after it", () =>
   }).pipe(Effect.provide(layerTest)),
 );
 
+it.effect("accepts a close on a done item and a reopen on an open item, and changes nothing", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* setup;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    yield* addTask(orchestrator);
+    yield* reopenTask(orchestrator, "reopen-open");
+    assert.equal(
+      (yield* projections.getThreadProjection(owner)).thread.operatorTasks?.[0]?.state,
+      "open",
+    );
+    yield* doneTask(orchestrator, "click-1");
+    yield* closeTask(orchestrator, "close-late", owner);
+    const projection = yield* projections.getThreadProjection(owner);
+    assert.equal(projection.thread.operatorTasks?.[0]?.state, "done");
+    assert.lengthOf(doneMessages(projection), 1);
+  }).pipe(Effect.provide(layerTest)),
+);
+
 it.effect("does not let another thread close an item", () =>
   Effect.gen(function* () {
     const orchestrator = yield* setup;
@@ -322,6 +352,25 @@ it.effect("keeps the same items when the thread's stored events are applied agai
       replayed?.map((task) => `${task.id}:${task.state}`),
       ["task:one:done", "task:two:closed"],
     );
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("wakes a snoozed thread when Done queues its message", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* setup;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    yield* addTask(orchestrator);
+    yield* orchestrator.dispatch({
+      type: "thread.snooze",
+      commandId: CommandId.make("snooze-owner"),
+      threadId: owner,
+      snoozedUntil: "2099-01-01T00:00:00.000Z",
+    });
+    assert.isNotNull((yield* projections.getThreadProjection(owner)).thread.snoozedUntil ?? null);
+    yield* doneTask(orchestrator, "click-1");
+    const projection = yield* projections.getThreadProjection(owner);
+    assert.lengthOf(doneMessages(projection), 1);
+    assert.isNull(projection.thread.snoozedUntil ?? null);
   }).pipe(Effect.provide(layerTest)),
 );
 

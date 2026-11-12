@@ -3,6 +3,7 @@ import {
   type ModelSelection,
   OPERATOR_TASK_OPEN_LIMIT,
   OPERATOR_TASK_RETENTION_MS,
+  OPERATOR_TASK_TOTAL_LIMIT,
   OperatorTaskId,
   type OperatorTask,
   type OrchestrationV2AppThread,
@@ -149,14 +150,15 @@ describe("decideOperatorTaskCommand add", () => {
 
   it("does not move the thread in the sidebar", () => {
     const before = makeThread();
-    const { thread } = ok(decide(before, add("c1", "task:1")));
+    const later = DateTime.makeUnsafe("2026-11-12T12:05:00.000Z");
+    const { thread } = ok(decide(before, add("c1", "task:1"), { at: later }));
+    assert.equal(taskOf(thread, "task:1").createdAt, "2026-11-12T12:05:00.000Z");
     assert.equal(thread.updatedAt, before.updatedAt);
   });
 
   it("rejects a second item with the same id instead of duplicating it", () => {
     const first = ok(decide(makeThread(), add("c1", "task:1"))).thread;
-    fail(decide(first, add("c2", "task:1")));
-    assert.lengthOf(first.operatorTasks ?? [], 1);
+    assert.include(fail(decide(first, add("c2", "task:1"))), "already exists");
   });
 
   it("refuses an open item past the per-thread limit", () => {
@@ -165,6 +167,29 @@ describe("decideOperatorTaskCommand add", () => {
       thread = ok(decide(thread, add(`c${index}`, `task:${index}`))).thread;
     }
     fail(decide(thread, add("c-over", "task:over")));
+  });
+
+  it("keeps a thread's items under the total limit by dropping its oldest finished ones", () => {
+    const finished = (index: number): OperatorTask => ({
+      ...taskOf(ok(decide(makeThread(), add("seed", `task:${index}`))).thread, `task:${index}`),
+      state: "done",
+      doneAt: "2026-11-12T11:00:00.000Z",
+      doneDelivery: "queued",
+      // Newer than the retention cutoff, and in age order: task:0 is the oldest.
+      updatedAt: DateTime.formatIso(
+        DateTime.makeUnsafe(Date.parse("2026-11-12T10:00:00.000Z") + index * 1000),
+      ),
+    });
+    const full = makeThread({
+      operatorTasks: Array.from({ length: OPERATOR_TASK_TOTAL_LIMIT }, (_, index) =>
+        finished(index),
+      ),
+    });
+    const next = ok(decide(full, add("c1", "task:new"))).thread;
+    assert.lengthOf(next.operatorTasks ?? [], OPERATOR_TASK_TOTAL_LIMIT);
+    assert.isUndefined(next.operatorTasks?.find((task) => task.id === "task:0"));
+    assert.equal(taskOf(next, "task:1").state, "done");
+    assert.equal(taskOf(next, "task:new").state, "open");
   });
 
   it("drops done and closed items older than the retention window on the next write", () => {

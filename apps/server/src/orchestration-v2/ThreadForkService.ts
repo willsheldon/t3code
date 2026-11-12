@@ -138,6 +138,8 @@ export const layer: Layer.Layer<ThreadForkServiceV2> = Layer.succeed(
         autoSettleDisabledAt: null,
         // A guest link belongs to the thread it was made for.
         guestShare: null,
+        // A task names the thread waiting on it, so a copy would answer to the wrong thread.
+        operatorTasks: undefined,
         lastVisitedAt: null,
         // A fork is a new thread; it does not inherit how often the source was opened.
         opens: null,

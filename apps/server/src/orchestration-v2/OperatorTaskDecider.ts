@@ -2,6 +2,7 @@ import {
   MessageId,
   OPERATOR_TASK_OPEN_LIMIT,
   OPERATOR_TASK_RETENTION_MS,
+  OPERATOR_TASK_TOTAL_LIMIT,
   type OperatorTask,
   type OperatorTaskDoneDelivery,
   type OrchestrationV2AppThread,
@@ -51,15 +52,26 @@ export function decideOperatorTaskCommand(input: {
   const task =
     "taskId" in command ? tasks.find((candidate) => candidate.id === command.taskId) : undefined;
 
-  /** Writes the new item list. Finished items past the retention window go with the write. */
+  /** Writes the new item list: finished items past the window go, then the oldest past the cap. */
   const write = (next: ReadonlyArray<OperatorTask>, wake: OperatorTaskDecision["wake"] = null) => {
     const cutoff = DateTime.toEpochMillis(now) - OPERATOR_TASK_RETENTION_MS;
+    const kept = next.filter(
+      (candidate) => candidate.state === "open" || Date.parse(candidate.updatedAt) > cutoff,
+    );
+    const excess = kept.length - OPERATOR_TASK_TOTAL_LIMIT;
+    const dropped = new Set(
+      excess > 0
+        ? kept
+            .filter((candidate) => candidate.state !== "open")
+            .toSorted((a, b) => Date.parse(a.updatedAt) - Date.parse(b.updatedAt))
+            .slice(0, excess)
+            .map((candidate) => candidate.id)
+        : [],
+    );
     return Result.succeed<OperatorTaskDecision>({
       thread: {
         ...thread,
-        operatorTasks: next.filter(
-          (candidate) => candidate.state === "open" || Date.parse(candidate.updatedAt) > cutoff,
-        ),
+        operatorTasks: kept.filter((candidate) => !dropped.has(candidate.id)),
       },
       wake,
     });
