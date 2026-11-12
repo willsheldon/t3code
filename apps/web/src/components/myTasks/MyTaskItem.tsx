@@ -54,13 +54,13 @@ export function MyTaskItem({
   const sendReply = useOrchestrationCommand(threadEnvironment.startTurn, { reportFailure: false });
   const replyId = useId();
   const [busy, setBusy] = useState(false);
-  // Tied to the state the task was in, so a later change from another source clears it.
+  // Tied to the task as it was, so a change from any source clears it.
   const [failure, setFailure] = useState<{
     readonly action: "done" | "reopen" | "reply";
     readonly message: string;
-    readonly state: typeof task.state;
+    readonly updatedAt: string;
   } | null>(null);
-  const error = failure !== null && failure.state === task.state ? failure : null;
+  const error = failure !== null && failure.updatedAt === task.updatedAt ? failure : null;
   const [replying, setReplying] = useState(false);
   const [reply, setReply] = useState("");
 
@@ -82,7 +82,7 @@ export function MyTaskItem({
       setFailure({
         action: kind,
         message: failureMessage(squashAtomCommandFailure(result)),
-        state: task.state,
+        updatedAt: task.updatedAt,
       });
     }
     return false;
@@ -192,7 +192,14 @@ export function MyTaskItem({
             >
               Send
             </Button>
-            <Button size="compact" variant="ghost" onClick={() => setReplying(false)}>
+            <Button
+              size="compact"
+              variant="ghost"
+              onClick={() => {
+                setReplying(false);
+                if (failure?.action === "reply") setFailure(null);
+              }}
+            >
               Cancel
             </Button>
           </div>
