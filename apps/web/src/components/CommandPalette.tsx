@@ -1610,7 +1610,9 @@ function OpenCommandPaletteDialog(props: {
 
   if (
     environments.some(
-      (environment) => environment.serverConfig?.environment.capabilities.operatorTasks === true,
+      (environment) =>
+        environment.connection.phase === "connected" &&
+        environment.serverConfig?.environment.capabilities.operatorTasks === true,
     )
   ) {
     actionItems.push({

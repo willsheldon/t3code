@@ -1,8 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import {
-  openOperatorTaskCount,
-  type EnvironmentOperatorTask,
-} from "@t3tools/client-runtime/operatorTasks";
+import type { EnvironmentOperatorTask } from "@t3tools/client-runtime/operatorTasks";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 
@@ -61,10 +58,6 @@ export function useOperatorTasks(): OperatorTasksState {
     errors,
     multipleEnvironments: supportedIds.length > 1,
   };
-}
-
-export function useOpenOperatorTaskCount(): number {
-  return openOperatorTaskCount(useOperatorTasks().items);
 }
 
 /** Done and Reopen need operate permission on the environment that holds the task. */

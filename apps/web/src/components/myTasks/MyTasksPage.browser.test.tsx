@@ -6,6 +6,7 @@ import {
   type OperatorTaskEntry,
 } from "@t3tools/contracts";
 import type { EnvironmentOperatorTask } from "@t3tools/client-runtime/operatorTasks";
+import * as Cause from "effect/Cause";
 import { expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
@@ -115,7 +116,10 @@ it("says so when nothing is waiting", async () => {
 
 it("sends a new command for each Done click and offers a retry after a failure", async () => {
   using _clock = setup([entry("Run the migration")]);
-  state.done.mockResolvedValueOnce({ _tag: "Failure", cause: new Error("Thread is busy") });
+  state.done.mockResolvedValueOnce({
+    _tag: "Failure",
+    cause: Cause.fail(new Error("Thread is busy")),
+  });
   await using _screen = await render(<MyTasksPage />);
   await userEvent.click(page.getByRole("button", { name: "Done" }));
   await expect.element(page.getByRole("alert")).toHaveTextContent("Thread is busy");

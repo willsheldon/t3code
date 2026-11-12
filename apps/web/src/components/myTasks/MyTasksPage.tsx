@@ -77,7 +77,12 @@ export function MyTasksPage() {
               Could not load tasks from {labelOf(error.environmentId)}: {error.message}
             </p>
           ))}
-          {shown === 0 && !loading ? (
+          {loading && shown === 0 ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              Loading tasks…
+            </p>
+          ) : null}
+          {shown === 0 && !loading && errors.length === 0 ? (
             <Empty size="compact">
               <EmptyHeader>
                 <EmptyMedia variant="icon">

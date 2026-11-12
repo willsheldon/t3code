@@ -54,7 +54,13 @@ export function MyTaskItem({
   const sendReply = useOrchestrationCommand(threadEnvironment.startTurn, { reportFailure: false });
   const replyId = useId();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Tied to the state the task was in, so a later change from another source clears it.
+  const [failure, setFailure] = useState<{
+    readonly action: "done" | "reopen" | "reply";
+    readonly message: string;
+    readonly state: typeof task.state;
+  } | null>(null);
+  const error = failure !== null && failure.state === task.state ? failure : null;
   const [replying, setReplying] = useState(false);
   const [reply, setReply] = useState("");
 
@@ -62,21 +68,29 @@ export function MyTaskItem({
   const overdue = open && task.dueAt !== null && Date.parse(task.dueAt) < now;
   const canReply = open && shell !== null && !task.threadArchived;
 
-  const run = async <A, E>(action: () => Promise<AtomCommandResult<A, E>>) => {
+  const run = async <A, E>(
+    kind: "done" | "reopen" | "reply",
+    action: () => Promise<AtomCommandResult<A, E>>,
+  ) => {
     if (busy) return false;
     setBusy(true);
-    setError(null);
+    setFailure(null);
     const result = await action();
     setBusy(false);
     if (result._tag !== "Failure") return true;
-    if (!isAtomCommandInterrupted(result))
-      setError(failureMessage(squashAtomCommandFailure(result)));
+    if (!isAtomCommandInterrupted(result)) {
+      setFailure({
+        action: kind,
+        message: failureMessage(squashAtomCommandFailure(result)),
+        state: task.state,
+      });
+    }
     return false;
   };
 
   // Each click is a new command, so a failed Done is retried by clicking again.
-  const clickAction = (command: typeof markDone) =>
-    run(() =>
+  const clickAction = (kind: "done" | "reopen", command: typeof markDone) =>
+    run(kind, () =>
       command({
         environmentId,
         input: {
@@ -90,7 +104,7 @@ export function MyTaskItem({
   const submitReply = async () => {
     const text = reply.trim();
     if (text.length === 0 || shell === null) return;
-    const sent = await run(() =>
+    const sent = await run("reply", () =>
       sendReply({
         environmentId,
         input: {
@@ -154,7 +168,7 @@ export function MyTaskItem({
       ) : null}
       {error === null ? null : (
         <p role="alert" className="text-xs text-destructive-foreground">
-          {error}
+          {error.message}
         </p>
       )}
       {replying ? (
@@ -164,6 +178,7 @@ export function MyTaskItem({
           </label>
           <Textarea
             id={replyId}
+            autoFocus
             value={reply}
             rows={3}
             placeholder="Message to the waiting thread"
@@ -189,9 +204,9 @@ export function MyTaskItem({
               <Button
                 size="compact"
                 disabled={busy || !canOperate}
-                onClick={() => void clickAction(markDone)}
+                onClick={() => void clickAction("done", markDone)}
               >
-                {error === null ? "Done" : "Retry"}
+                {error?.action === "done" ? "Retry" : "Done"}
               </Button>
               {canReply && canOperate ? (
                 <Button size="compact" variant="outline" onClick={() => setReplying(true)}>
@@ -204,7 +219,7 @@ export function MyTaskItem({
               size="compact"
               variant="outline"
               disabled={busy || !canOperate}
-              onClick={() => void clickAction(reopen)}
+              onClick={() => void clickAction("reopen", reopen)}
             >
               Reopen
             </Button>
