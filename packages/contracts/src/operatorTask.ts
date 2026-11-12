@@ -14,6 +14,8 @@ const OPERATOR_TASK_CLOSE_REASON_MAX_LENGTH = 500;
 export const OPERATOR_TASK_OPEN_LIMIT = 50;
 /** Items one thread may hold in all. The oldest finished ones go first when a write passes it. */
 export const OPERATOR_TASK_TOTAL_LIMIT = 100;
+/** Instruction characters one thread may hold across its items. Items ride every thread event. */
+export const OPERATOR_TASK_TEXT_LIMIT = 64_000;
 /** Done and closed items are kept this long, then dropped on the thread's next task write. */
 export const OPERATOR_TASK_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 

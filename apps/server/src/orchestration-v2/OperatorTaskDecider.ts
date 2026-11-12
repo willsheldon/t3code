@@ -2,6 +2,7 @@ import {
   MessageId,
   OPERATOR_TASK_OPEN_LIMIT,
   OPERATOR_TASK_RETENTION_MS,
+  OPERATOR_TASK_TEXT_LIMIT,
   OPERATOR_TASK_TOTAL_LIMIT,
   type OperatorTask,
   type OperatorTaskDoneDelivery,
@@ -56,22 +57,29 @@ export function decideOperatorTaskCommand(input: {
   const task =
     "taskId" in command ? tasks.find((candidate) => candidate.id === command.taskId) : undefined;
 
-  /** Writes the new item list: finished items past the window go, then the oldest past the cap. */
+  /**
+   * Writes the new item list. Finished items past the window go; then the oldest finished ones go
+   * while the thread holds too many items or too much text. Open items are never dropped.
+   */
   const write = (next: ReadonlyArray<OperatorTask>, wake: OperatorTaskDecision["wake"] = null) => {
     const cutoff = DateTime.toEpochMillis(now) - OPERATOR_TASK_RETENTION_MS;
     const kept = next.filter(
       (candidate) => candidate.state === "open" || Date.parse(candidate.updatedAt) > cutoff,
     );
-    const excess = kept.length - OPERATOR_TASK_TOTAL_LIMIT;
-    const dropped = new Set(
-      excess > 0
-        ? kept
-            .filter((candidate) => candidate.state !== "open")
-            .toSorted((a, b) => Date.parse(a.updatedAt) - Date.parse(b.updatedAt))
-            .slice(0, excess)
-            .map((candidate) => candidate.id)
-        : [],
-    );
+    let count = kept.length;
+    let chars = kept.reduce((total, candidate) => total + candidate.instructions.length, 0);
+    const dropped = new Set<string>();
+    const oldestFinished = kept
+      .filter((candidate) => candidate.state !== "open")
+      .toSorted((a, b) => Date.parse(a.updatedAt) - Date.parse(b.updatedAt));
+    for (const candidate of oldestFinished) {
+      if (count <= OPERATOR_TASK_TOTAL_LIMIT && chars <= OPERATOR_TASK_TEXT_LIMIT) break;
+      dropped.add(candidate.id);
+      count -= 1;
+      chars -= candidate.instructions.length;
+    }
+    if (chars > OPERATOR_TASK_TEXT_LIMIT)
+      return Result.fail("This thread's tasks hold too much text.");
     return Result.succeed<OperatorTaskDecision>({
       thread: {
         ...thread,

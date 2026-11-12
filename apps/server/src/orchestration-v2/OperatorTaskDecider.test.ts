@@ -3,6 +3,7 @@ import {
   type ModelSelection,
   OPERATOR_TASK_OPEN_LIMIT,
   OPERATOR_TASK_RETENTION_MS,
+  OPERATOR_TASK_TEXT_LIMIT,
   OPERATOR_TASK_TOTAL_LIMIT,
   OperatorTaskId,
   type OperatorTask,
@@ -188,6 +189,48 @@ describe("decideOperatorTaskCommand add", () => {
     assert.lengthOf(next.operatorTasks ?? [], OPERATOR_TASK_TOTAL_LIMIT);
     assert.isUndefined(next.operatorTasks?.find((task) => task.id === "task:0"));
     assert.equal(taskOf(next, "task:1").state, "done");
+    assert.equal(taskOf(next, "task:new").state, "open");
+  });
+
+  it("bounds the instruction text a thread holds, so its payload stays small", () => {
+    const withText = (thread: OrchestrationV2AppThread, id: string, length: number) =>
+      decide(thread, add(`c-${id}`, `task:${id}`, { instructions: "x".repeat(length) }));
+    const chunk = OPERATOR_TASK_TEXT_LIMIT / 8;
+    let thread = makeThread();
+    for (let index = 0; index < 8; index += 1) {
+      thread = ok(withText(thread, `open-${index}`, chunk)).thread;
+    }
+    // Open items are never dropped to make room.
+    assert.include(fail(withText(thread, "over", 1)), "too much text");
+    const edit = update("c-edit", "task:open-0", threadId, { instructions: "x".repeat(chunk + 1) });
+    assert.include(fail(decide(thread, edit)), "too much text");
+    // Done frees nothing it needs: it never fails for text.
+    ok(decide(thread, done("c-done", "task:open-0")));
+  });
+
+  it("drops the oldest finished items to make room for new text", () => {
+    const chunk = OPERATOR_TASK_TEXT_LIMIT / 8;
+    const finished = (index: number): OperatorTask => ({
+      ...taskOf(
+        ok(decide(makeThread(), add("seed", `task:${index}`, { instructions: "x".repeat(chunk) })))
+          .thread,
+        `task:${index}`,
+      ),
+      state: "done",
+      doneAt: "2026-11-12T11:00:00.000Z",
+      doneDelivery: "queued",
+      updatedAt: DateTime.formatIso(
+        DateTime.makeUnsafe(Date.parse("2026-11-12T10:00:00.000Z") + index * 1000),
+      ),
+    });
+    const full = makeThread({
+      operatorTasks: Array.from({ length: 8 }, (_, index) => finished(index)),
+    });
+    const next = ok(
+      decide(full, add("c1", "task:new", { instructions: "x".repeat(chunk) })),
+    ).thread;
+    assert.isUndefined(next.operatorTasks?.find((task) => task.id === "task:0"));
+    assert.equal(taskOf(next, "task:7").state, "done");
     assert.equal(taskOf(next, "task:new").state, "open");
   });
 
