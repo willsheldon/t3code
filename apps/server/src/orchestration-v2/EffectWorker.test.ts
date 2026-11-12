@@ -148,6 +148,7 @@ function layerExecutorFor(input: {
     Layer.succeed(
       RuntimeRequestService.RuntimeRequestServiceV2,
       RuntimeRequestService.RuntimeRequestServiceV2.of({
+        detach: () => Effect.void,
         respond: input.respond ?? (() => Effect.void),
       }),
     ),

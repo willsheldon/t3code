@@ -21,6 +21,8 @@ import {
   TurnItemId,
   type ModelSelection,
   type OrchestrationV2Run,
+  type OrchestrationV2DomainEvent,
+  type OrchestrationV2ExecutionNode,
   type OrchestrationV2ShellSnapshot,
   type OrchestrationV2RuntimeRequest,
   ProjectId,
@@ -68,6 +70,7 @@ import { ROLLBACK_FAILED_MESSAGE } from "./CheckpointRollbackService.ts";
 import * as EffectWorker from "./EffectWorker.ts";
 import * as EffectOutbox from "./EffectOutbox.ts";
 import * as EventSink from "./EventSink.ts";
+import * as RuntimeRequestService from "./RuntimeRequestService.ts";
 import * as ProviderRuntimeRecoveryService from "./ProviderRuntimeRecoveryService.ts";
 import * as EventStore from "./EventStore.ts";
 import * as ProjectionReplay from "./testkit/ProjectionReplay.ts";
@@ -1351,6 +1354,10 @@ it.layer(layerTest)("OrchestrationV2LayerLive", (it) => {
     threadId: ThreadId,
     runId: RunId | null,
     responseCapability: OrchestrationV2RuntimeRequest["responseCapability"],
+    binding?: Pick<
+      OrchestrationV2ExecutionNode,
+      "parentNodeId" | "rootNodeId" | "providerThreadId" | "providerTurnId"
+    >,
   ) {
     const eventSink = yield* EventSink.EventSinkV2;
     const now = yield* DateTime.now;
@@ -1382,6 +1389,7 @@ it.layer(layerTest)("OrchestrationV2LayerLive", (it) => {
             checkpointScopeId: null,
             startedAt: now,
             completedAt: null,
+            ...binding,
           },
         },
         {
@@ -1393,7 +1401,7 @@ it.layer(layerTest)("OrchestrationV2LayerLive", (it) => {
           payload: {
             id: requestId,
             nodeId,
-            providerTurnId: null,
+            providerTurnId: binding?.providerTurnId ?? null,
             nativeRequestRef: null,
             kind: "user_input",
             status: "pending",
@@ -1414,8 +1422,8 @@ it.layer(layerTest)("OrchestrationV2LayerLive", (it) => {
             threadId,
             runId,
             nodeId,
-            providerThreadId: null,
-            providerTurnId: null,
+            providerThreadId: binding?.providerThreadId ?? null,
+            providerTurnId: binding?.providerTurnId ?? null,
             nativeItemRef: null,
             parentItemId: null,
             ordinal: 0,
@@ -1622,6 +1630,311 @@ it.layer(layerTest)("OrchestrationV2LayerLive", (it) => {
           ["provider-turn.start"],
         );
       }),
+  );
+
+  it.effect.each([
+    "answer",
+    "dismiss",
+    "tool",
+    "child",
+    "background",
+    "unsupported",
+    "auto",
+    "live-answer",
+    "held",
+  ] as const)("detaches only a sole queued question (%s)", (mode) =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const sessions = yield* ProviderSessionManager.ProviderSessionManagerV2;
+      const outbox = yield* EffectOutbox.EffectOutboxV2;
+      const threadId = ThreadId.make(`queue-question:${mode}`);
+      const createCommand = {
+        type: "thread.create" as const,
+        commandId: CommandId.make(`queue-create:${mode}`),
+        threadId,
+        projectId: ProjectId.make(`queue-project:${mode}`),
+        title: "Queue question",
+        modelSelection,
+        runtimeMode: "full-access" as const,
+        interactionMode: "default" as const,
+        branch: null,
+        worktreePath: process.cwd(),
+        createdBy: "user" as const,
+        creationSource: "web" as const,
+      };
+      yield* orchestrator.dispatch(createCommand);
+      yield* orchestrator.dispatch({
+        type: "message.dispatch",
+        commandId: CommandId.make(`queue-original:${mode}`),
+        threadId,
+        messageId: MessageId.make(`queue-original:${mode}`),
+        text: "Ask",
+        attachments: [],
+        createdBy: "user",
+        creationSource: "web",
+        dispatchMode: { type: "start_immediately" },
+      });
+      const initial = yield* orchestrator.getThreadProjection(threadId);
+      const run = initial.runs[0]!;
+      const providerThread = initial.providerThreads[0]!;
+      const now = yield* DateTime.now;
+      const providerTurn = {
+        id: ProviderTurnId.make(`queue-turn:${mode}`),
+        providerThreadId: providerThread.id,
+        nodeId: run.rootNodeId!,
+        runAttemptId: run.activeAttemptId,
+        nativeTurnRef: null,
+        ordinal: 1,
+        status: "running" as const,
+        startedAt: now,
+        completedAt: null,
+      };
+      const providerSession = {
+        id: providerThread.providerSessionId!,
+        driver,
+        providerInstanceId: modelSelection.instanceId,
+        status: "running" as const,
+        cwd: process.cwd(),
+        model: modelSelection.model,
+        capabilities: CodexProviderCapabilitiesV2,
+        createdAt: now,
+        updatedAt: now,
+        lastError: null,
+      };
+      const { requestId, nodeId } = yield* seedPendingQuestion(
+        threadId,
+        run.id,
+        { type: "live", providerSessionId: providerSession.id },
+        {
+          parentNodeId: run.rootNodeId,
+          rootNodeId: run.rootNodeId!,
+          providerThreadId: providerThread.id,
+          providerTurnId: providerTurn.id,
+        },
+      );
+      const question = yield* orchestrator.getThreadProjection(threadId);
+      const questionNode = question.nodes.find((node) => node.id === nodeId)!;
+      const request = question.runtimeRequests[0]!;
+      const projections = yield* ProjectionStore.ProjectionStoreV2;
+      const apply = (
+        event: Omit<Parameters<typeof projections.apply>[0], "id" | "threadId" | "occurredAt">,
+        id: string,
+      ) =>
+        projections.apply({
+          ...event,
+          threadId,
+          occurredAt: now,
+          id: EventId.make(`${id}:${mode}`),
+        } as OrchestrationV2DomainEvent);
+      yield* apply(
+        {
+          type: "run.updated",
+          payload: { ...run, status: mode === "auto" ? "running" : "waiting", startedAt: now },
+        },
+        "queue-run-waiting",
+      );
+      yield* apply(
+        {
+          type: "run-attempt.updated",
+          payload: {
+            ...initial.attempts[0]!,
+            status: "running",
+            startedAt: now,
+            providerTurnId: providerTurn.id,
+          },
+        },
+        "queue-attempt",
+      );
+      yield* apply({ type: "provider-turn.updated", payload: providerTurn }, "queue-turn");
+      yield* apply(
+        { type: "provider-session.attached", payload: providerSession },
+        "queue-session",
+      );
+      if (mode === "live-answer")
+        yield* apply(
+          {
+            type: "runtime-request.updated",
+            payload: { ...request, status: "resolved", resolvedAt: now },
+          },
+          "queue-live-answer",
+        );
+      if (mode === "tool")
+        yield* apply(
+          {
+            type: "node.updated",
+            payload: {
+              ...questionNode,
+              id: NodeId.make(`unrelated-tool:${mode}`),
+              kind: "tool_call",
+              status: "running",
+            },
+          },
+          "queue-tool",
+        );
+      if (mode === "child") {
+        yield* orchestrator.dispatch({
+          ...createCommand,
+          commandId: CommandId.make(`parent-create:${mode}`),
+          threadId: ThreadId.make(`parent:${mode}`),
+        });
+        yield* apply(
+          {
+            type: "thread.metadata-updated",
+            payload: {
+              ...initial.thread,
+              lineage: {
+                ...initial.thread.lineage,
+                parentThreadId: ThreadId.make(`parent:${mode}`),
+                relationshipToParent: "subagent",
+              },
+            },
+          },
+          "queue-child",
+        );
+      }
+      if (mode === "held")
+        yield* apply(
+          {
+            type: "run.created",
+            payload: {
+              ...run,
+              id: RunId.make("held-run"),
+              ordinal: 2,
+              status: "queued",
+              queueHeld: true,
+            },
+          },
+          "held-run",
+        );
+      let releases = 0;
+      const runtime = {
+        providerSession,
+        canDetachUserInput: () => Effect.succeed(true),
+        hasPendingBackgroundWorkForThread: () => Effect.succeed(mode === "background"),
+        detachUserInput: () =>
+          Effect.gen(function* () {
+            const converted = yield* orchestrator.getThreadProjection(threadId);
+            assert.equal(converted.runtimeRequests[0]?.responseCapability.type, "message");
+            releases++;
+            yield* apply(
+              {
+                type: "provider-turn.updated",
+                payload: { ...providerTurn, status: "completed", completedAt: now },
+              },
+              "queue-end-turn",
+            );
+            yield* apply(
+              {
+                type: "run.updated",
+                payload: { ...run, status: "completed", startedAt: now, completedAt: now },
+              },
+              "queue-end-run",
+            );
+          }),
+      };
+      using _session = vi.spyOn(sessions, "get").mockReturnValue(
+        Effect.succeedSome({
+          ...runtime,
+          ...(mode === "unsupported"
+            ? { canDetachUserInput: undefined, detachUserInput: undefined }
+            : {}),
+        } as never),
+      );
+      const queuedCommand = {
+        type: "message.dispatch" as const,
+        commandId: CommandId.make(`queue-next:${mode}`),
+        threadId,
+        messageId: MessageId.make(`queue-next:${mode}`),
+        text: "Next",
+        attachments: [],
+        createdBy: mode === "held" ? ("agent" as const) : ("user" as const),
+        creationSource: mode === "held" ? ("mcp" as const) : ("web" as const),
+        dispatchMode: { type: "queue_after_active" as const },
+        ...(mode === "auto" ? { deliveryIntent: "auto" as const } : {}),
+      };
+      yield* orchestrator.dispatch(queuedCommand);
+      const detached = yield* orchestrator.getThreadProjection(threadId);
+      const shouldDetach = mode === "answer" || mode === "dismiss";
+      assert.equal(
+        detached.runtimeRequests[0]?.responseCapability.type,
+        shouldDetach ? "message" : "live",
+      );
+      const effects = yield* outbox.listByCommandId(queuedCommand.commandId);
+      const release = effects.find((effect) => effect.request.type === "runtime-request.detach");
+      assert.equal(release !== undefined, shouldDetach);
+      if (!release || release.request.type !== "runtime-request.detach") return;
+      yield* orchestrator.dispatch({
+        type: "runtime-request.respond",
+        commandId: CommandId.make(`queue-answer:${mode}`),
+        threadId,
+        requestId,
+        ...(mode === "dismiss"
+          ? { decision: "cancel" as const }
+          : { answers: { color: "Blue", sizes: ["Small"] } }),
+      });
+      assert.equal(releases, 0);
+      const afterAnswer = yield* orchestrator.getThreadProjection(threadId);
+      assert.equal(
+        afterAnswer.runs.filter((run) => run.status === "queued").length,
+        mode === "answer" ? 2 : 1,
+      );
+      assert.deepEqual(
+        (yield* outbox.listByCommandId(CommandId.make(`queue-answer:${mode}`))).map(
+          (effect) => effect.request.type,
+        ),
+        [],
+      );
+      const releaseRequest = release.request;
+      yield* Effect.flatMap(RuntimeRequestService.RuntimeRequestServiceV2, (service) =>
+        service.detach({ ...releaseRequest, threadId }),
+      ).pipe(
+        Effect.provide(
+          RuntimeRequestService.layer.pipe(
+            Layer.provide(
+              Layer.mergeAll(
+                Layer.succeed(ProjectionStore.ProjectionStoreV2, projections),
+                Layer.succeed(ProviderSessionManager.ProviderSessionManagerV2, sessions),
+              ),
+            ),
+          ),
+        ),
+      );
+      assert.equal(releases, 1);
+      const queued = (yield* orchestrator.getThreadProjection(threadId)).runs.filter(
+        (run) => run.status === "queued",
+      );
+      for (const next of queued) {
+        yield* orchestrator.dispatch({
+          type: "queued-run.start",
+          commandId: CommandId.make(`start:${next.id}`),
+          threadId,
+          runId: next.id,
+        });
+        const running = yield* orchestrator.getThreadProjection(threadId);
+        assert.equal(
+          running.runs.filter((run) => ["waiting", "running", "starting"].includes(run.status))
+            .length,
+          1,
+        );
+        yield* apply(
+          {
+            type: "run.updated",
+            payload: {
+              ...running.runs.find((run) => run.id === next.id)!,
+              status: "completed",
+              completedAt: now,
+            },
+          },
+          `finish:${next.id}`,
+        );
+      }
+      assert.equal(
+        (yield* orchestrator.getThreadProjection(threadId)).runs.every(
+          (run) => run.status === "completed",
+        ),
+        true,
+      );
+    }),
   );
 
   it.effect.each(["idle", "interrupt", "background"] as const)(
