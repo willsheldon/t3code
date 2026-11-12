@@ -66,6 +66,8 @@ import {
 } from "./thread-list-v2-items";
 import { useThreadRowProviderInstanceResolver } from "./thread-provider-instance";
 import type { ThreadPrPresentation } from "../../state/thread-pr-presentation";
+import { uuidv4 } from "../../lib/uuid";
+import { buildThreadTitleRuleAction } from "../home/thread-title-rule-action";
 import { ThreadPrDemandProvider } from "../../state/thread-pr-demand";
 import {
   isThreadListV2ListItem,
@@ -170,6 +172,13 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
     setTitleRules,
     resetFilters,
   } = useHomeListOptions(availableEnvironmentIds);
+  const titleRuleAction = buildThreadTitleRuleAction({
+    newId: uuidv4,
+    enabled: options.enhancedFilterEnabled,
+    rules: options.titleRules,
+    onTitleRulesChange: setTitleRules,
+    onOpenRules: props.onOpenFilterRules,
+  });
   const searchEnvironmentIds =
     options.selectedEnvironmentId === null
       ? workspaceEnvironments
@@ -518,6 +527,7 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
             onRenameThread={renameThread}
             onRegenerateThreadTitle={regenerateThreadTitle}
             titleRegenerationSupported={titleRegenerationEnvironmentIds.has(thread.environmentId)}
+            titleRuleAction={titleRuleAction}
             settlementSupported={settlementEnvironmentIds.has(thread.environmentId)}
             onSettleThread={settleThread}
             snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}

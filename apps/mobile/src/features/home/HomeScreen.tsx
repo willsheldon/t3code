@@ -53,6 +53,8 @@ import { useNativeWorkspaceColumnsSupported } from "../../native/NativeWorkspace
 import { useThreadSearch } from "../../state/queries";
 import { requestThreadMessageJump } from "../threads/threadMessageJump";
 import { useThreadListSearchMatches } from "../threads/useThreadListSearchMatches";
+import { uuidv4 } from "../../lib/uuid";
+import { buildThreadTitleRuleAction } from "./thread-title-rule-action";
 import { useThreadListV2 } from "../threads/useThreadListV2";
 import { useThreadListNow } from "../threads/use-thread-list-now";
 import { useSearchScrollRestoration } from "../layout/workspace/useSearchScrollRestoration";
@@ -402,6 +404,13 @@ export function HomeScreen(props: HomeScreenProps) {
     : null;
   const filterRules = listOptions.enhancedFilterEnabled ? listOptions.titleRules : NO_FILTER_RULES;
   const filterKeys = filterState.selectedProjectKeys;
+  const titleRuleAction = buildThreadTitleRuleAction({
+    newId: uuidv4,
+    enabled: listOptions.enhancedFilterEnabled,
+    rules: listOptions.titleRules,
+    onTitleRulesChange: props.filterControls.onTitleRulesChange,
+    onOpenRules: props.filterControls.onOpenRules,
+  });
   // An archived project's filter reads as all projects, matching the filter menu.
   const projectFilter = useMemo(
     () =>
@@ -654,6 +663,7 @@ export function HomeScreen(props: HomeScreenProps) {
         onRenameThread={handleRenameThread}
         onRegenerateThreadTitle={handleRegenerateThreadTitle}
         titleRegenerationSupported={titleRegenerationEnvironmentIds.has(thread.environmentId)}
+        titleRuleAction={titleRuleAction}
         settlementSupported={settlementEnvironmentIds.has(thread.environmentId)}
         onSettleThread={handleSettleThread}
         snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}
