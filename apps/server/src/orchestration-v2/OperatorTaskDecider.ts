@@ -96,7 +96,6 @@ export function decideOperatorTaskCommand(input: {
         {
           id: command.taskId,
           threadId: thread.id,
-          projectId: thread.projectId,
           createdByThreadId: command.createdByThreadId,
           action: command.action,
           instructions: command.instructions ?? "",

@@ -1,12 +1,6 @@
 import * as Schema from "effect/Schema";
 
-import {
-  IsoDateTime,
-  OperatorTaskId,
-  ProjectId,
-  ThreadId,
-  TrimmedNonEmptyString,
-} from "./baseSchemas.ts";
+import { IsoDateTime, OperatorTaskId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 /**
  * An operator task is an action that is the operator's to do, recorded by the thread that is
@@ -47,9 +41,8 @@ export type OperatorTaskDoneDelivery = typeof OperatorTaskDoneDelivery.Type;
 
 export const OperatorTask = Schema.Struct({
   id: OperatorTaskId,
-  /** The waiting thread. It receives the Done message. */
+  /** The waiting thread. It receives the Done message. Its project is the item's project. */
   threadId: ThreadId,
-  projectId: ProjectId,
   /** Set by the server from the calling thread. Absent callers record null. */
   createdByThreadId: Schema.NullOr(ThreadId),
   action: OperatorTaskAction,

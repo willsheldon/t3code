@@ -127,14 +127,13 @@ const taskOf = (thread: OrchestrationV2AppThread, taskId: string): OperatorTask 
 };
 
 describe("decideOperatorTaskCommand add", () => {
-  it("records an open item that takes its project from the thread", () => {
+  it("records an open item for the thread", () => {
     const { thread } = ok(
       decide(makeThread(), add("c1", "task:1", { instructions: "```sh\nnpm run db\n```" })),
     );
     assert.deepEqual(taskOf(thread, "task:1"), {
       id: OperatorTaskId.make("task:1"),
       threadId,
-      projectId: ProjectId.make("project:tasks"),
       createdByThreadId: threadId,
       action: "Run the migration",
       instructions: "```sh\nnpm run db\n```",

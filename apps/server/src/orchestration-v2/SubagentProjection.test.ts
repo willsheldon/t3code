@@ -131,7 +131,6 @@ it("starts a subagent child without the parent's operator tasks", () => {
     {
       id: OperatorTaskId.make("task:subagent-parent"),
       threadId: parentThreadId,
-      projectId: ProjectId.make("project:subagent-snooze"),
       createdByThreadId: parentThreadId,
       action: "Run the migration",
       instructions: "",

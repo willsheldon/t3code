@@ -199,7 +199,6 @@ it.effect("does not copy the source thread's operator tasks to a fork", () =>
       {
         id: OperatorTaskId.make("task:fork-source"),
         threadId: sourceThreadId,
-        projectId: ProjectId.make("project:fork-snooze"),
         createdByThreadId: sourceThreadId,
         action: "Run the migration",
         instructions: "",
