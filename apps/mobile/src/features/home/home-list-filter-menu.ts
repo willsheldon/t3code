@@ -381,10 +381,7 @@ export function buildHomeListFilterAppBarItems(
   state: HomeListFilterMenuState,
   handlers: HomeListFilterControls,
 ): AppBarMenuItem[] {
-  const convert = (
-    items: HomeListFilterMenu["items"],
-    parentId: string,
-  ): AppBarMenuItem[] =>
+  const convert = (items: HomeListFilterMenu["items"], parentId: string): AppBarMenuItem[] =>
     items.map((item, index) => {
       const id = `${parentId}${index}`;
       return item.type === "action"
