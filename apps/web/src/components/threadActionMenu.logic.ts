@@ -9,6 +9,7 @@ export type ThreadActionMenuId =
   | "project-settings"
   | "pin"
   | "unpin"
+  | "add-title-rule"
   | "settle"
   | "unsettle"
   | "auto-settle"
@@ -75,6 +76,8 @@ export interface ThreadActionMenuState {
     readonly label: string;
     readonly isActive: boolean;
   } | null;
+  /** Set only while the enhanced filter is on; `atLimit` disables the action. */
+  readonly titleRule?: { readonly atLimit: boolean };
   readonly isPinned: boolean;
   readonly isSettled: boolean;
   readonly autoSettleEnabled: boolean;
@@ -101,6 +104,7 @@ export interface ThreadActionMenuState {
 export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean {
   return ![
     "find",
+    "add-title-rule",
     "new-thread-on-branch",
     "project-settings",
     "mark-unread",
@@ -134,6 +138,16 @@ export function buildThreadActionMenuItems(
           state.isPinned
             ? { id: "unpin" as const, label: "Unpin thread", icon: "pin-off" }
             : { id: "pin" as const, label: "Pin thread", icon: "pin" },
+        ]
+      : []),
+    ...(state.titleRule
+      ? [
+          {
+            id: "add-title-rule" as const,
+            label: "Add title rule…",
+            icon: "list-filter",
+            disabled: state.titleRule.atLimit,
+          },
         ]
       : []),
     ...(state.supports.settlement

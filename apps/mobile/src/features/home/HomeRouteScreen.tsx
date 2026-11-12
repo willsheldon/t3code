@@ -218,7 +218,10 @@ export function HomeRouteScreen() {
           searchQuery={searchQuery}
           selectedEnvironmentId={selectedEnvironmentId}
           filterState={filterState}
-          filterControls={filterControls}
+          filterControls={{
+            ...filterControls,
+            onOpenRules: () => navigation.navigate("HomeFilters"),
+          }}
           threads={threads}
         />
         <ThreadUndoNotice visible={visible} />
