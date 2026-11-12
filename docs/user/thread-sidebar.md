@@ -239,6 +239,11 @@ replaces the separate project filter button while it is on.
   thread shows when it matches no Hide rule and, if you have any Only rules, at
   least one of them.
 
+To keep one thread in view, choose **Add title rule…** in its menu, on web, desktop and mobile. It
+adds an **Only** rule with the thread's full title as plain text at the end of the
+list, and opens the filters so you can switch it to **Hide** or edit it. The entry is
+dimmed at 20 rules.
+
 Press Enter in a rule to add another below it. Press Backspace in an empty rule
 to remove it. Each rule has a switch, so you can turn it off without deleting it.
 

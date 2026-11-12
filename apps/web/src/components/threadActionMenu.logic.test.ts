@@ -74,4 +74,28 @@ describe("buildThreadActionMenuItems", () => {
     expect(items.find((item) => item.id === "archive")?.disabled).toBe(true);
     expect(items.find((item) => item.id === "turn-into-project")?.disabled).toBe(true);
   });
+
+  describe("add-title-rule", () => {
+    const find = (state: ThreadActionMenuState) =>
+      buildThreadActionMenuItems(state).find((item) => item.id === "add-title-rule");
+
+    it("is omitted unless the enhanced filter supplies it", () => {
+      expect(find(baseState)).toBeUndefined();
+    });
+
+    it("follows Pin thread and disables at the rule limit", () => {
+      const ids = buildThreadActionMenuItems({ ...baseState, titleRule: { atLimit: false } }).map(
+        (item) => item.id,
+      );
+      expect(ids.indexOf("add-title-rule")).toBe(ids.indexOf("pin") + 1);
+      expect(find({ ...baseState, titleRule: { atLimit: false } })?.disabled).toBeFalsy();
+      expect(find({ ...baseState, titleRule: { atLimit: true } })?.disabled).toBe(true);
+    });
+
+    it("stays enabled for a read-only connection", () => {
+      expect(
+        find({ ...baseState, canOperate: false, titleRule: { atLimit: false } })?.disabled,
+      ).toBeFalsy();
+    });
+  });
 });
