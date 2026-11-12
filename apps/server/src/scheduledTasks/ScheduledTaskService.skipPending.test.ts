@@ -44,6 +44,8 @@ const harness = Effect.gen(function* () {
         ManagedPolicy.layerTest(),
         Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
         Layer.mock(ThreadManagementService.ThreadManagementService)({
+          getThreadShell: () =>
+            Effect.succeed({ projectId: PROJECT, archivedAt: null, deletedAt: null } as never),
           sendToThread: (input) =>
             Ref.update(sends, (n) => n + 1).pipe(
               Effect.andThen(
