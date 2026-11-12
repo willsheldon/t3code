@@ -68,6 +68,8 @@ import {
 import * as WorktreeHandlers from "./toolkits/worktree/handlers.ts";
 import { WorktreeToolkit } from "./toolkits/worktree/tools.ts";
 import * as WorktreeMcpService from "./WorktreeMcpService.ts";
+import * as OperatorTasksHandlers from "./toolkits/operatorTasks/handlers.ts";
+import { OperatorTasksToolkit } from "./toolkits/operatorTasks/tools.ts";
 import * as PullRequestsHandlers from "./toolkits/pullRequests/handlers.ts";
 import { PullRequestsToolkit } from "./toolkits/pullRequests/tools.ts";
 import * as DeviceHandlers from "./toolkits/device/handlers.ts";
@@ -1198,6 +1200,11 @@ export const layerAttachmentToolkit = toolkitRegistration(
   AttachmentHandlers.layer,
 );
 
+const layerOperatorTasksToolkit = toolkitRegistration(
+  OperatorTasksToolkit,
+  OperatorTasksHandlers.layer,
+);
+
 export const layerPullRequestsToolkit = toolkitRegistration(
   PullRequestsToolkit,
   PullRequestsHandlers.layer,
@@ -1258,6 +1265,7 @@ export const layerTools = Layer.mergeAll(
   layerPreviewControlsRegistration,
   layerWorktreeToolkitRegistration,
   layerPullRequestsToolkit,
+  layerOperatorTasksToolkit,
   layerDeviceToolkit,
   layerHtmlToolkit,
 );

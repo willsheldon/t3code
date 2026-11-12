@@ -75,6 +75,7 @@ import {
   ThreadId,
   TurnItemId,
   NodeId,
+  OperatorTask,
   ProjectId,
   ProviderInstanceId,
 } from "@t3tools/contracts";
@@ -190,6 +191,14 @@ export type ProjectionLimitRecoveryCandidate = Pick<
   | "limitRecovery"
   | "snoozedUntil"
 >;
+
+/** One operator task with the fields of its thread that a list shows. */
+export interface ProjectionOperatorTask {
+  readonly task: OperatorTask;
+  readonly projectId: ProjectId;
+  readonly threadTitle: string;
+  readonly threadArchived: boolean;
+}
 
 export type ProjectionThreadPullRequests = Pick<
   OrchestrationV2AppThread,
@@ -543,6 +552,14 @@ export interface ProjectionStoreV2Shape {
   readonly getThreadShell: (
     threadId: ThreadId,
   ) => Effect.Effect<OrchestrationV2ThreadShell | null, ProjectionStoreV2Error>;
+  /**
+   * Every operator task of a live thread, skipping items copied from another thread. Scans thread
+   * rows, so callers read it once and follow changes by event.
+   */
+  readonly listOperatorTasks: () => Effect.Effect<
+    ReadonlyArray<ProjectionOperatorTask>,
+    ProjectionStoreV2Error
+  >;
   /** The thread whose current guest share has this id. Scans thread rows; only redeem uses it. */
   readonly findGuestShareThreadId: (
     shareId: GuestShareId,
@@ -1190,6 +1207,7 @@ const decodePullRequestThread = Schema.decodeUnknownEffect(
   Schema.fromJsonString(PullRequestThread),
 );
 
+const decodeOperatorTaskPayload = Schema.decodeUnknownEffect(Schema.fromJsonString(OperatorTask));
 const decodeThreadPayload = Schema.decodeUnknownEffect(
   Schema.fromJsonString(OrchestrationV2AppThreadJsonSchema),
 );
@@ -7486,6 +7504,40 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       return Object.fromEntries(rows.map((row) => [row.thread_id, row.title]));
     }, Effect.mapError(shellSnapshotReadError));
 
+    const listOperatorTasks = Effect.fn("ProjectionStore.listOperatorTasks")(function* () {
+      const rows = yield* sql<{
+        readonly thread_id: string;
+        readonly project_id: string;
+        readonly title: string;
+        readonly archived_at: string | null;
+        readonly task_json: string;
+      }>`
+        SELECT t.thread_id, t.project_id, t.title, t.archived_at, j.value AS task_json
+        FROM orchestration_v2_projection_threads AS t,
+          json_each(t.payload_json, '$.operatorTasks') AS j
+        WHERE t.deleted_at IS NULL
+          AND instr(t.payload_json, '"operatorTasks"') > 0
+          AND json_extract(j.value, '$.threadId') = t.thread_id
+      `;
+      const decoded = yield* Effect.forEach(rows, (row) =>
+        decodeOperatorTaskPayload(row.task_json).pipe(
+          Effect.map((task): ProjectionOperatorTask => ({
+            task,
+            projectId: ProjectId.make(row.project_id),
+            threadTitle: row.title,
+            threadArchived: row.archived_at !== null,
+          })),
+          // One bad item must not hide every other thread's tasks.
+          Effect.catch(() =>
+            Effect.logWarning("Skipping an operator task that does not decode", {
+              threadId: row.thread_id,
+            }).pipe(Effect.as(null)),
+          ),
+        ),
+      );
+      return decoded.filter((entry) => entry !== null);
+    }, Effect.mapError(shellSnapshotReadError));
+
     const findGuestShareThreadId = Effect.fn("ProjectionStore.findGuestShareThreadId")(function* (
       shareId: GuestShareId,
     ) {
@@ -7649,6 +7701,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       listOlderSettledThreads: readOnReader(listOlderSettledThreads),
       getThreadShell: readOnReader(getThreadShell),
       findGuestShareThreadId: readOnReader(findGuestShareThreadId),
+      listOperatorTasks: readOnReader(listOperatorTasks),
       getThread: readOnReader(getThread),
       getSettlementCandidates: readOnReader(getSettlementCandidates),
       getThreadsWithPullRequests: readOnReader(getThreadsWithPullRequests),

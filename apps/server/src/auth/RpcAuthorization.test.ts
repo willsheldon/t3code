@@ -45,6 +45,15 @@ describe("RPC authorization scopes", () => {
     }
   });
 
+  it("lets readers watch operator tasks but keeps Done and Reopen, which message a thread, behind operate scope", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.operatorTasksSubscribe)).toBe(
+      AuthOrchestrationReadScope,
+    );
+    for (const method of [WS_METHODS.operatorTasksDone, WS_METHODS.operatorTasksReopen]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
+    }
+  });
+
   it("keeps triage, which seeds an agent that reads logs and the database, behind operate scope", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.serverPrepareTriage)).toBe(
       AuthOrchestrationOperateScope,

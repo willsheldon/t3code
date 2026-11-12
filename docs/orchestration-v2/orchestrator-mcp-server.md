@@ -505,6 +505,16 @@ Explicit `bindToCurrentThread: true` without a caller thread in that project
 is rejected. Pausing uses `schedule_task` with `scheduledTaskId` and `enabled: false`;
 deletion is permanent.
 
+### Operator tasks
+
+`my_task_add`, `my_task_update`, and `my_task_list` record and read work only the
+operator can do. The waiting thread owns an item: only it can edit or close it,
+and `my_task_update` always acts as the calling thread, so no tool input can
+name another actor. Delegated children and MCP clients outside a thread cannot
+add or update; clients can list. Marking an item done or reopening it is not a
+tool. The operator RPC issues both, so an agent cannot mark its own item done.
+Done queues one message to the waiting thread in the same commit.
+
 ## Delegated Task Lifecycle
 
 The MCP server is a command ingress into V2. It does not call provider adapters
