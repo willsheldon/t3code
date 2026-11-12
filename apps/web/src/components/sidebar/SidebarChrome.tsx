@@ -1,4 +1,10 @@
-import { ArrowLeftIcon, ArrowRightIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  ChartNoAxesColumnIcon,
+  ListChecksIcon,
+  SettingsIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { memo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
@@ -13,7 +19,9 @@ import {
 } from "../../navigationHistory";
 import { primaryServerKeybindingsAtom } from "../../state/server";
 import { cn } from "../../lib/utils";
+import { openOperatorTaskCount } from "@t3tools/client-runtime/operatorTasks";
 import { usePullRequestsSupported } from "../../state/environments";
+import { useOperatorTasks } from "../../state/operatorTasks";
 import { T3Wordmark } from "../T3Wordmark";
 import {
   resolveEnvironmentIdentificationPillLabel,
@@ -197,18 +205,33 @@ function SidebarUtilityItem({
   icon,
   label,
   onClick,
+  badge = 0,
 }: {
   icon: ReactNode;
   label: string;
   onClick: () => void;
+  /** An open count shown over the icon; none while zero. */
+  badge?: number;
 }) {
   return (
     <SidebarMenuItem className="shrink-0">
       <Tooltip>
         <TooltipTrigger
           render={
-            <SidebarMenuButton aria-label={label} onClick={onClick} size="icon">
+            <SidebarMenuButton
+              aria-label={badge > 0 ? `${label}, ${badge} open` : label}
+              onClick={onClick}
+              size="icon"
+            >
               {icon}
+              {badge > 0 ? (
+                <span
+                  aria-hidden
+                  className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-3xs leading-none font-medium text-primary-foreground tabular-nums"
+                >
+                  {badge > 99 ? "99+" : badge}
+                </span>
+              ) : null}
             </SidebarMenuButton>
           }
         />
@@ -226,6 +249,7 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     select: (location) => isSidebarUtilityPage(location.pathname),
   });
   const pullRequestsSupported = usePullRequestsSupported();
+  const operatorTasks = useOperatorTasks();
   const closeMobileSidebar = () => {
     if (isMobile) {
       setOpenMobile(false);
@@ -237,6 +261,10 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
       to: "/pull-requests",
       search: readPullRequestListPreferences(),
     });
+  };
+  const handleMyTasksClick = () => {
+    closeMobileSidebar();
+    void navigate({ to: "/my-tasks" });
   };
   const handleSettingsClick = () => {
     closeMobileSidebar();
@@ -276,6 +304,14 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
               icon={<PullRequestGlyph.pullRequest />}
               label="Pull requests"
               onClick={handlePullRequestsClick}
+            />
+          ) : null}
+          {operatorTasks.supported ? (
+            <SidebarUtilityItem
+              icon={<ListChecksIcon />}
+              label="My tasks"
+              badge={openOperatorTaskCount(operatorTasks.items)}
+              onClick={handleMyTasksClick}
             />
           ) : null}
           <SidebarUtilityItem
