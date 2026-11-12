@@ -66,6 +66,13 @@ If your **Send shortcut** requires `Cmd+Enter` or `Ctrl+Enter`, that shortcut us
 your default follow-up behavior; add **Shift** to use the opposite action. This
 applies only to multiline messages when you choose the multiline send option.
 
+If Claude is waiting only for an answer to a question, queueing a new message lets
+it finish that turn and process the queue. The question stays open. Answering it
+creates another turn that includes the question's card ID and waits behind any
+active turn. This applies to top-level Claude threads, not delegated agents.
+Steering does not release the question, and messages queued before the question
+appears need a new queue arrival to trigger this behavior.
+
 Use `Cmd+Shift+Enter` on macOS or `Ctrl+Shift+Enter` on Windows and Linux to send
 the oldest queued message as a steer. This leaves the current draft intact and
 requires an active turn that supports steering. If that shortcut sends the opposite

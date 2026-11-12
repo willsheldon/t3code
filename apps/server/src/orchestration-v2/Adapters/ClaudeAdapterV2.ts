@@ -4328,6 +4328,8 @@ type PendingClaudeRuntimeRequest =
   | {
       readonly type: "user_input";
       readonly answers: Deferred.Deferred<ProviderUserInputAnswers, never>;
+      readonly detached: Deferred.Deferred<void>;
+      readonly context: ActiveClaudeTurnContext;
     };
 
 export function claudeUserInputQuestions(
@@ -9930,11 +9932,14 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               questions,
             });
             const answers = yield* Deferred.make<ProviderUserInputAnswers, never>();
+            const detached = yield* Deferred.make<void>();
             yield* Ref.update(pendingRuntimeRequests, (current) => {
               const updated = new Map(current);
               updated.set(String(artifacts.request.id), {
                 type: "user_input",
                 answers,
+                detached,
+                context,
               });
               return updated;
             });
@@ -9962,6 +9967,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               answers,
               callbackOptions.signal,
             ).pipe(
+              Effect.raceFirst(Deferred.await(detached).pipe(Effect.as({}))),
               Effect.ensuring(
                 Ref.update(pendingRuntimeRequests, (current) => {
                   const updated = new Map(current);
@@ -9970,6 +9976,12 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 }),
               ),
             );
+            if (yield* Deferred.isDone(detached))
+              return {
+                behavior: "deny",
+                message:
+                  "Stop this turn. This question remains open; the human answer will arrive in a later turn.",
+              } satisfies PermissionResult;
             if (!(yield* Deferred.isDone(answers))) yield* cancelWithdrawnRequest(artifacts);
             return callbackOptions.signal.aborted
               ? ({
@@ -11608,6 +11620,37 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             return current?.task.startedAt === subagent.task.startedAt
               ? confirmedOutcome
               : undefined;
+          }),
+          canDetachUserInput: Effect.fn("ClaudeAdapterV2.canDetachUserInput")(function* (target) {
+            const pending = (yield* Ref.get(pendingRuntimeRequests)).get(String(target.requestId));
+            const context = yield* Ref.get(activeTurn);
+            if (
+              pending?.type !== "user_input" ||
+              context !== pending.context ||
+              context.providerTurnId !== target.providerTurnId ||
+              context.input.providerThread.id !== target.providerThread.id ||
+              context.input.providerThread.ownerNodeId !== null ||
+              (yield* Ref.get(pendingRuntimeRequests)).size !== 1 ||
+              (yield* Deferred.isDone(pending.answers)) ||
+              (yield* Deferred.isDone(pending.detached))
+            )
+              return false;
+            if ([...context.toolCalls.values()].some((tool) => tool.toolName !== "AskUserQuestion"))
+              return false;
+            return !(yield* runtime.hasPendingBackgroundWorkForThread!(target.providerThread, {
+              includeSubagents: true,
+            }));
+          }),
+          detachUserInput: Effect.fn("ClaudeAdapterV2.detachUserInput")(function* (target) {
+            const pending = (yield* Ref.get(pendingRuntimeRequests)).get(String(target.requestId));
+            if (pending?.type !== "user_input" || (yield* Deferred.isDone(pending.detached)))
+              return;
+            if (!(yield* runtime.canDetachUserInput!(target)))
+              return yield* new ProviderAdapter.ProviderAdapterProtocolError({
+                driver: CLAUDE_PROVIDER,
+                detail: "The question is no longer the sole provider wait.",
+              });
+            yield* Deferred.succeed(pending.detached, undefined);
           }),
           respondToRuntimeRequest: Effect.fn("ClaudeAdapterV2.respondToRuntimeRequest")(
             function* (requestInput) {
