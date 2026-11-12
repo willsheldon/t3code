@@ -15,6 +15,7 @@ import {
   countThreadFilterStatuses,
   initializeThreadFilter,
   insertThreadTitleRule,
+  threadTitleRuleFromThread,
   matchesThreadFilters,
   matchesThreadTitleRules,
   migrateLegacyThreadTitleFilter,
@@ -348,6 +349,32 @@ describe("rule list editing", () => {
     expect(threadTitleRuleFocusAfterRemoval(rules, "b")).toBe("a");
     expect(threadTitleRuleFocusAfterRemoval(rules, "a")).toBe("b");
     expect(threadTitleRuleFocusAfterRemoval([rule({ id: "a" })], "a")).toBeNull();
+  });
+});
+
+describe("rule from thread", () => {
+  it("makes an enabled plain-text only rule from the trimmed title", () => {
+    expect(threadTitleRuleFromThread("n", "  Fix (a.b)  ")).toEqual({
+      id: "n",
+      mode: "only",
+      pattern: "Fix (a.b)",
+      regex: false,
+      enabled: true,
+      tripped: false,
+    });
+  });
+
+  it("makes no rule from a blank title", () => {
+    expect(threadTitleRuleFromThread("n", "")).toBeNull();
+    expect(threadTitleRuleFromThread("n", " \t\n")).toBeNull();
+  });
+
+  it("appends through insert and leaves a full list unchanged", () => {
+    const added = threadTitleRuleFromThread("n", "T")!;
+    const few = [rule({ id: "a" })];
+    expect(insertThreadTitleRule(few, null, added).at(-1)).toBe(added);
+    const full = Array.from({ length: THREAD_TITLE_RULE_LIMIT }, (_, i) => rule({ id: `${i}` }));
+    expect(insertThreadTitleRule(full, null, added)).toBe(full);
   });
 });
 

@@ -81,6 +81,13 @@ export function newThreadTitleRule(id: string): ThreadTitleRule {
   return { id, mode: "hide", pattern: "", regex: false, enabled: true, tripped: false };
 }
 
+/** An enabled plain-text "only" rule for one thread's full title; null for a blank title. */
+export function threadTitleRuleFromThread(id: string, title: string): ThreadTitleRule | null {
+  const pattern = title.trim();
+  if (pattern === "") return null;
+  return { id, mode: "only", pattern, regex: false, enabled: true, tripped: false };
+}
+
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 

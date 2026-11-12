@@ -150,6 +150,11 @@ const ICON_PATHS: Record<string, ReadonlyArray<{ tag: string; attrs: Record<stri
     { tag: "path", attrs: { d: "M3 5a2 2 0 0 0 2 2h3" } },
     { tag: "path", attrs: { d: "M3 3v13a2 2 0 0 0 2 2h3" } },
   ],
+  "list-filter": [
+    { tag: "path", attrs: { d: "M2 5h20" } },
+    { tag: "path", attrs: { d: "M6 12h12" } },
+    { tag: "path", attrs: { d: "M9 19h6" } },
+  ],
   "text-search": [
     { tag: "path", attrs: { d: "M21 5H3" } },
     { tag: "path", attrs: { d: "M10 12H3" } },

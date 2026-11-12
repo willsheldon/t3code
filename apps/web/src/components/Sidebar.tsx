@@ -218,13 +218,16 @@ import {
   ThreadFilterStoredSchema,
   type ThreadFilterStatus,
   type ThreadTitleRule,
+  THREAD_TITLE_RULE_LIMIT,
   compileThreadTitleRules,
   countThreadFilterStatuses,
   hasLiveThreadFilters,
   initializeThreadFilter,
+  insertThreadTitleRule,
   matchesThreadFilters,
   resolveThreadFilterStatus,
   threadAccountKey,
+  threadTitleRuleFromThread,
   toggleThreadFilterStatus,
   warmThreadTitleRuleCache,
 } from "@t3tools/client-runtime/state/thread-filters";
@@ -2867,6 +2870,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                       isActive: projectScopeKeys.includes(threadProjectGroup.projectKey),
                     }
                   : null,
+              ...(enhancedFilterEnabled
+                ? { titleRule: { atLimit: titleRules.length >= THREAD_TITLE_RULE_LIMIT } }
+                : {}),
               isPinned,
               isSettled,
               autoSettleEnabled: thread.autoSettleDisabledAt == null,
@@ -2958,6 +2964,13 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           case "unpin":
             attemptUnpin(threadRef);
             return;
+          case "add-title-rule": {
+            const rule = threadTitleRuleFromThread(randomUUID(), thread.title);
+            if (!rule) return;
+            setTitleRules((rules) => insertThreadTitleRule(rules, null, rule));
+            setEnhancedFilterOpen(true);
+            return;
+          }
           case "turn-into-project": {
             const result = await turnThreadIntoProject(threadRef);
             if (result._tag === "Success") {

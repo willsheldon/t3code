@@ -66,6 +66,7 @@ import { useThreadPr } from "../../state/use-thread-pr";
 import { useSwipeRowDormant } from "../home/swipe-row-activation";
 import { ThreadSwipeable } from "../home/thread-swipe-actions";
 import { buildThreadTitleRegenerationMenuItems } from "./thread-title-regeneration-menu";
+import type { ThreadTitleRuleAction } from "../home/thread-title-rule-action";
 import { canTurnThreadIntoProject, turnThreadIntoProject } from "./turnThreadIntoProject";
 import { threadCanArchive } from "../home/threadArchive";
 import {
@@ -685,6 +686,8 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly pinningSupported: boolean;
   readonly autoSettleOptOutSupported: boolean;
   readonly titleRegenerationSupported: boolean;
+  /** Set while the enhanced filter is on. */
+  readonly titleRuleAction?: ThreadTitleRuleAction | undefined;
   readonly reorderSupported?: boolean;
   readonly onMoveThread?: (
     thread: EnvironmentThreadShell,
@@ -818,6 +821,11 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   );
   const handleUnsnooze = useCallback(() => onUnsnoozeThread(thread), [onUnsnoozeThread, thread]);
   const handleUnsettle = useCallback(() => onUnsettleThread(thread), [onUnsettleThread, thread]);
+  const titleRuleAction = props.titleRuleAction;
+  const handleAddTitleRule = useCallback(
+    () => titleRuleAction?.onAdd(thread),
+    [titleRuleAction, thread],
+  );
   const handlePin = useCallback(() => onPinThread(thread), [onPinThread, thread]);
   const handleUnpin = useCallback(() => onUnpinThread(thread), [onUnpinThread, thread]);
   const handleSetAutoSettle = useCallback(
@@ -926,6 +934,16 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         supported: props.titleRegenerationSupported,
         isRegenerating: isRegeneratingTitle,
       }),
+      ...(titleRuleAction
+        ? [
+            {
+              id: "add-title-rule",
+              title: "Add title rule…",
+              image: "line.3.horizontal.decrease",
+              attributes: { disabled: titleRuleAction.atLimit },
+            } satisfies MenuAction,
+          ]
+        : []),
       ...(canTurnIntoProject
         ? [
             {
@@ -937,7 +955,13 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           ]
         : []),
     ],
-    [canTurnIntoProject, props.titleRegenerationSupported, thread.runtime, isRegeneratingTitle],
+    [
+      canTurnIntoProject,
+      props.titleRegenerationSupported,
+      thread.runtime,
+      isRegeneratingTitle,
+      titleRuleAction,
+    ],
   );
   const menuActions = useMemo<MenuAction[]>(() => {
     const nested = Platform.OS === "ios";
@@ -1031,6 +1055,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       if (nativeEvent.event === "unsnooze") handleUnsnooze();
       if (nativeEvent.event === "pin") handlePin();
       if (nativeEvent.event === "unpin") handleUnpin();
+      if (nativeEvent.event === "add-title-rule") handleAddTitleRule();
       if (nativeEvent.event === "auto-settle:enabled") handleSetAutoSettle(true);
       if (nativeEvent.event === "auto-settle:disabled") handleSetAutoSettle(false);
       if (nativeEvent.event === "arrange") appAtomRegistry.set(threadArrangementOpenAtom, true);
@@ -1081,6 +1106,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       handleRename,
       handleMoveDown,
       handleMoveUp,
+      handleAddTitleRule,
       handlePin,
       handleSettle,
       handleSnooze,
