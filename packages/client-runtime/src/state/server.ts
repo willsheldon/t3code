@@ -22,6 +22,7 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
@@ -745,6 +746,12 @@ export function recordFetchedWorkspaceSnapshot(
   );
 }
 
+const OPERATOR_TASKS_RETRY_SCHEDULE = Schedule.exponential("1 second").pipe(
+  Schedule.modifyDelay(({ duration }) =>
+    Effect.succeed(Duration.min(duration, Duration.seconds(30))),
+  ),
+);
+
 export function createServerEnvironmentAtoms<R, E>(
   runtime: Atom.AtomRuntime<
     EnvironmentRegistry.EnvironmentRegistry | Persistence.EnvironmentCacheStore | R,
@@ -1334,6 +1341,21 @@ export function createServerEnvironmentAtoms<R, E>(
     scheduledTaskWebhookDelivery: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:server:scheduled-task:webhook-delivery",
       tag: WS_METHODS.scheduledTasksGetWebhookDelivery,
+    }),
+    operatorTasksLive: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:server:operator-tasks:live",
+      tag: WS_METHODS.operatorTasksSubscribe,
+      // A burst of agent output can overrun the server's live event budget and end the stream.
+      // Subscribing again starts with a fresh list.
+      transform: (stream) => stream.pipe(Stream.retry(OPERATOR_TASKS_RETRY_SCHEDULE)),
+    }),
+    doneOperatorTask: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:operator-task:done",
+      tag: WS_METHODS.operatorTasksDone,
+    }),
+    reopenOperatorTask: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:operator-task:reopen",
+      tag: WS_METHODS.operatorTasksReopen,
     }),
     scheduledTasksLive: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:server:scheduled-tasks:live",

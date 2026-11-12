@@ -67,6 +67,7 @@ import {
   FolderPlusIcon,
   MessageSquareDashedIcon,
   LinkIcon,
+  ListChecksIcon,
   MessageSquareIcon,
   PaletteIcon,
   RotateCcwIcon,
@@ -1603,6 +1604,25 @@ function OpenCommandPaletteDialog(props: {
       icon: <PullRequestGlyph.pullRequest className={ITEM_ICON_CLASS} />,
       run: async () => {
         await navigate({ to: "/pull-requests", search: readPullRequestListPreferences() });
+      },
+    });
+  }
+
+  if (
+    environments.some(
+      (environment) =>
+        environment.connection.phase === "connected" &&
+        environment.serverConfig?.environment.capabilities.operatorTasks === true,
+    )
+  ) {
+    actionItems.push({
+      kind: "action",
+      value: "action:my-tasks",
+      searchTerms: ["tasks", "todo", "to-do", "waiting", "inbox", "done", "reply"],
+      title: "Open my tasks",
+      icon: <ListChecksIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({ to: "/my-tasks" });
       },
     });
   }
