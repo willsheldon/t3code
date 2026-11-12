@@ -770,12 +770,14 @@ it.effect(
       assert.equal(summary.terminalizedRuns, 1);
       assert.equal(summary.stoppedSessions, 1);
       assert.equal(summary.retiredEffects, 2);
+      assert.deepEqual(committedInput?.effects, []);
       assert.deepEqual(committedInput?.cancelUnsettledEffects?.effectTypes, [
         "provider-turn.start",
         "provider-turn.interrupt",
         "provider-turn.steer",
         "provider-turn.restart",
         "runtime-request.respond",
+        "runtime-request.detach",
       ]);
       const events = committedInput?.events ?? [];
       assert.deepEqual(
