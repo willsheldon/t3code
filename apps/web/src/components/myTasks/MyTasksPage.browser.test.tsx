@@ -145,3 +145,21 @@ it("replies to the waiting thread through the queue and keeps the task open", as
   expect(state.done).not.toHaveBeenCalled();
   await expect.element(page.getByRole("button", { name: "Done" })).toBeVisible();
 });
+
+it("labels an archived thread without offering Reply, and explains finished tasks", async () => {
+  using _clock = setup([
+    entry("Rotate the key", { threadArchived: true }),
+    entry("Approve the deploy", {
+      state: "done",
+      doneAt: iso(-hour),
+      updatedAt: iso(-hour),
+      doneDelivery: "thread_archived",
+    }),
+    entry("Check the fix", { state: "closed", closeReason: "Saw it", updatedAt: iso(-hour) }),
+  ]);
+  await using _screen = await render(<MyTasksPage />);
+  await expect.element(page.getByText("Thread archived", { exact: true })).toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Reply" })).not.toBeInTheDocument();
+  await expect.element(page.getByText("Thread archived, no message sent.")).toBeVisible();
+  await expect.element(page.getByText("Closed by the thread: Saw it")).toBeVisible();
+});
