@@ -6799,6 +6799,108 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           now,
         });
       }
+      if (
+        dispatchMode.type === "queue_after_active" &&
+        run.queueHeld !== true &&
+        activeRun !== undefined &&
+        (activeRun.status === "running" || activeRun.status === "waiting") &&
+        projection.thread.lineage.relationshipToParent !== "subagent" &&
+        projection.thread.delegatedFrom === undefined &&
+        queueProviderThread.ownerNodeId === null &&
+        queueProviderThread.providerSessionId !== null
+      ) {
+        const pending = projection.runtimeRequests.filter(
+          (request) =>
+            request.status === "pending" && request.responseCapability.type !== "message",
+        );
+        const question = pending.length === 1 ? pending[0] : undefined;
+        const turn = projection.providerTurns.find((turn) => turn.id === question?.providerTurnId);
+        const ancestors = new Set<NodeId>();
+        let node = projection.nodes.find((node) => node.id === question?.nodeId);
+        while (node && node.runId === activeRun.id && !ancestors.has(node.id)) {
+          ancestors.add(node.id);
+          node = projection.nodes.find((candidate) => candidate.id === node?.parentNodeId);
+        }
+        const open = (status: string) => ["idle", "pending", "running", "waiting"].includes(status);
+        if (
+          question?.kind === "user_input" &&
+          question.responseCapability.type === "live" &&
+          question.responseCapability.providerSessionId === queueProviderThread.providerSessionId &&
+          turn?.status === "running" &&
+          turn.runAttemptId === activeRun.activeAttemptId &&
+          turn.providerThreadId === queueProviderThread.id &&
+          activeRun.rootNodeId !== null &&
+          ancestors.has(activeRun.rootNodeId) &&
+          !projection.nodes.some(
+            (node) => node.runId === activeRun.id && open(node.status) && !ancestors.has(node.id),
+          ) &&
+          !projection.subagents.some((task) => open(task.status)) &&
+          !projection.providerThreads.some(
+            (thread) => (thread.pendingBackgroundTasks?.length ?? 0) > 0,
+          )
+        ) {
+          const session = yield* providerSessions
+            .get(queueProviderThread.providerSessionId)
+            .pipe(mapDispatchError(command));
+          const target = {
+            providerThread: queueProviderThread,
+            providerTurnId: turn.id,
+            requestId: question.id,
+          };
+          if (
+            Option.isSome(session) &&
+            session.value.detachUserInput !== undefined &&
+            session.value.canDetachUserInput !== undefined &&
+            session.value.hasPendingBackgroundWorkForThread !== undefined &&
+            !(yield* session.value
+              .hasPendingBackgroundWorkForThread(queueProviderThread, {
+                includeSubagents: true,
+              })
+              .pipe(Effect.catchCause(() => Effect.succeed(true)))) &&
+            (yield* session.value
+              .canDetachUserInput(target)
+              .pipe(Effect.catchCause(() => Effect.succeed(false))))
+          ) {
+            const context = yield* projectionStore
+              .getRuntimeResponseContext(command.threadId, question.id)
+              .pipe(mapDispatchError(command));
+            if (context.item?.type === "user_input_request") {
+              yield* emitEvent({
+                type: "runtime-request.updated",
+                threadId: command.threadId,
+                runId: activeRun.id,
+                nodeId: question.nodeId,
+                occurredAt: now,
+                payload: { ...question, responseCapability: { type: "message" } },
+              });
+              yield* emitEvent({
+                type: "turn-item.updated",
+                threadId: command.threadId,
+                runId: activeRun.id,
+                nodeId: question.nodeId,
+                occurredAt: now,
+                payload: { ...context.item, responseMode: "message", updatedAt: now },
+              });
+              yield* Ref.update(effects, (existing) => [
+                ...existing,
+                {
+                  id: `effect:${command.commandId}:runtime-request.detach:${question.id}`,
+                  commandId: command.commandId,
+                  threadId: command.threadId,
+                  request: {
+                    type: "runtime-request.detach" as const,
+                    requestId: question.id,
+                    providerSessionId: queueProviderThread.providerSessionId!,
+                    providerThreadId: queueProviderThread.id,
+                    providerTurnId: turn.id,
+                    runId: activeRun.id,
+                  },
+                },
+              ]);
+            }
+          }
+        }
+      }
       return;
     }
     const pendingForkTransfer = pendingForkTransferForThread(projection);

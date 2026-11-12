@@ -2,6 +2,11 @@ import { assert, it, vi } from "@effect/vitest";
 import {
   NodeId,
   ProviderSessionId,
+  ProviderDriverKind,
+  ProviderThreadId,
+  ProviderTurnId,
+  RunId,
+  RunAttemptId,
   RuntimeRequestId,
   ThreadId,
   type OrchestrationV2ThreadProjection,
@@ -10,7 +15,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProviderSessionManager from "./ProviderSessionManager.ts";
 import * as RuntimeRequestService from "./RuntimeRequestService.ts";
@@ -97,4 +102,83 @@ it.effect.each(["expired", "resolved"] as const)(
       assert.equal(respondToRuntimeRequest.mock.calls.length, 0);
     }).pipe(Effect.provide(layerTest));
   },
+);
+
+it.effect.each(["pending", "resolved", "cancelled", "release-failure", "stale-failure"] as const)(
+  "releases the original callback even when the detached card is %s",
+  (status) =>
+    Effect.gen(function* () {
+      const threadId = ThreadId.make("detach-thread");
+      const providerSessionId = ProviderSessionId.make("detach-session");
+      const target = {
+        threadId,
+        providerSessionId,
+        requestId: RuntimeRequestId.make("detach-request"),
+        runId: RunId.make("detach-run"),
+        providerThreadId: ProviderThreadId.make("detach-provider-thread"),
+        providerTurnId: ProviderTurnId.make("detach-turn"),
+      };
+      const released: string[] = [];
+      const interrupted: string[] = [];
+      let reads = 0;
+      const layerTest = RuntimeRequestService.layer.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.mock(ProjectionStore.ProjectionStoreV2)({
+              getThreadRecords: () =>
+                Effect.succeed({
+                  runs: [
+                    {
+                      id: target.runId,
+                      providerThreadId: target.providerThreadId,
+                      activeAttemptId: RunAttemptId.make("detach-attempt"),
+                      status: status === "stale-failure" && reads++ > 0 ? "completed" : "waiting",
+                    },
+                  ],
+                } as never),
+              getProviderControlContext: () =>
+                Effect.succeed({
+                  providerThread: { id: target.providerThreadId, providerSessionId },
+                  providerTurn: {
+                    id: target.providerTurnId,
+                    runAttemptId: RunAttemptId.make("detach-attempt"),
+                    status: "running",
+                    providerThreadId: target.providerThreadId,
+                  },
+                } as never),
+            }),
+            Layer.mock(ProviderSessionManager.ProviderSessionManagerV2)({
+              get: () =>
+                Effect.succeedSome({
+                  detachUserInput: () =>
+                    Effect.sync(() => {
+                      released.push(status);
+                    }).pipe(
+                      Effect.andThen(
+                        status.endsWith("failure")
+                          ? Effect.fail(
+                              new ProviderAdapter.ProviderAdapterProtocolError({
+                                driver: ProviderDriverKind.make("claudeAgent"),
+                                detail: "release rejected",
+                              }),
+                            )
+                          : Effect.void,
+                      ),
+                    ),
+                  interruptTurn: () =>
+                    Effect.sync(() => {
+                      interrupted.push(status);
+                    }),
+                } as never),
+            }),
+          ),
+        ),
+      );
+      yield* Effect.gen(function* () {
+        const service = yield* RuntimeRequestService.RuntimeRequestServiceV2;
+        yield* service.detach(target);
+        assert.deepEqual(released, [status]);
+        assert.deepEqual(interrupted, status === "release-failure" ? [status] : []);
+      }).pipe(Effect.provide(layerTest));
+    }),
 );
