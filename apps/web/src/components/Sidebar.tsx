@@ -661,6 +661,8 @@ function useSidebarThreads(input: {
     ...visibleSnoozedThreads,
     ...renderedSettledThreads,
   ];
+  // Pinned threads keep section "pinned" even inside a boring-mode folder, so a settle or
+  // snooze sweep across a folder leaves its pinned (PM) thread alone.
   const sectionByThreadKey = new Map<string, SidebarSection>();
   for (const [list, section] of [
     [pinnedThreads, "pinned"],
