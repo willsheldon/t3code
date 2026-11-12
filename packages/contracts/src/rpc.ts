@@ -367,6 +367,11 @@ import {
   TextGeneratorError,
 } from "./settings.ts";
 import {
+  OperatorTaskActionInput,
+  OperatorTaskError,
+  OperatorTaskListResult,
+} from "./operatorTask.ts";
+import {
   ScheduledTaskDeleteInput,
   ScheduledTaskDeleteResult,
   ScheduledTaskError,
@@ -548,6 +553,9 @@ export const WS_METHODS = {
   serverGetUsageSummary: "server.getUsageSummary",
   serverRefreshUsageRates: "server.refreshUsageRates",
 
+  operatorTasksSubscribe: "operatorTasks.subscribe",
+  operatorTasksDone: "operatorTasks.done",
+  operatorTasksReopen: "operatorTasks.reopen",
   scheduledTasksSubscribe: "scheduledTasks.subscribe",
   scheduledTasksUpsert: "scheduledTasks.upsert",
   scheduledTasksSetEnabled: "scheduledTasks.setEnabled",
@@ -1976,6 +1984,25 @@ const WsSubscribeServerLifecycleRpc = Rpc.make(WS_METHODS.subscribeServerLifecyc
   stream: true,
 });
 
+const WsOperatorTasksSubscribeRpc = Rpc.make(WS_METHODS.operatorTasksSubscribe, {
+  payload: Schema.Struct({}),
+  success: OperatorTaskListResult,
+  error: Schema.Union([OperatorTaskError, EnvironmentAuthorizationError]),
+  stream: true,
+});
+
+const WsOperatorTasksDoneRpc = Rpc.make(WS_METHODS.operatorTasksDone, {
+  payload: OperatorTaskActionInput,
+  success: Schema.Struct({}),
+  error: Schema.Union([OperatorTaskError, EnvironmentAuthorizationError]),
+});
+
+const WsOperatorTasksReopenRpc = Rpc.make(WS_METHODS.operatorTasksReopen, {
+  payload: OperatorTaskActionInput,
+  success: Schema.Struct({}),
+  error: Schema.Union([OperatorTaskError, EnvironmentAuthorizationError]),
+});
+
 const WsScheduledTasksSubscribeRpc = Rpc.make(WS_METHODS.scheduledTasksSubscribe, {
   payload: ScheduledTaskListInput,
   success: ScheduledTaskListResult,
@@ -2124,6 +2151,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetUsageSummaryRpc,
   WsServerRefreshUsageRatesRpc,
   WsServerSignalProcessRpc,
+  WsOperatorTasksSubscribeRpc,
+  WsOperatorTasksDoneRpc,
+  WsOperatorTasksReopenRpc,
   WsScheduledTasksSubscribeRpc,
   WsScheduledTasksUpsertRpc,
   WsScheduledTasksSetEnabledRpc,

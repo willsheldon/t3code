@@ -49,6 +49,7 @@ import {
   OperatorTask,
   OperatorTaskAction,
   OperatorTaskCloseReason,
+  OperatorTaskDueAt,
   OperatorTaskInstructions,
 } from "./operatorTask.ts";
 import { StoredThreadTags, ThreadTag } from "./threadTags.ts";
@@ -3436,7 +3437,7 @@ const OrchestrationV2InternalCommand = Schema.Union([
     taskId: OperatorTaskId,
     action: OperatorTaskAction,
     instructions: Schema.optional(OperatorTaskInstructions),
-    dueAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+    dueAt: Schema.optional(Schema.NullOr(OperatorTaskDueAt)),
     createdByThreadId: Schema.NullOr(ThreadId),
   }),
   Schema.Struct({
@@ -3448,7 +3449,7 @@ const OrchestrationV2InternalCommand = Schema.Union([
     actorThreadId: ThreadId,
     action: Schema.optional(OperatorTaskAction),
     instructions: Schema.optional(OperatorTaskInstructions),
-    dueAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+    dueAt: Schema.optional(Schema.NullOr(OperatorTaskDueAt)),
     close: Schema.optional(Schema.Struct({ reason: OperatorTaskCloseReason })),
   }),
   /** The operator's click. Marks the item done and queues one message to the thread. */

@@ -1,6 +1,13 @@
 import * as Schema from "effect/Schema";
 
-import { IsoDateTime, OperatorTaskId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import {
+  CommandId,
+  IsoDateTime,
+  OperatorTaskId,
+  ProjectId,
+  ThreadId,
+  TrimmedNonEmptyString,
+} from "./baseSchemas.ts";
 
 /**
  * An operator task is an action that is the operator's to do, recorded by the thread that is
@@ -18,6 +25,16 @@ export const OPERATOR_TASK_TOTAL_LIMIT = 100;
 export const OPERATOR_TASK_TEXT_LIMIT = 64_000;
 /** Done and closed items are kept this long, then dropped on the thread's next task write. */
 export const OPERATOR_TASK_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
+export const OperatorTaskDueAt = TrimmedNonEmptyString.check(
+  Schema.makeFilter(
+    (value) =>
+      (ISO_WITH_OFFSET.test(value) && !Number.isNaN(Date.parse(value))) ||
+      "Expected an ISO date and time with an offset, such as 2026-11-20T09:00:00Z.",
+  ),
+).annotate({ description: "When it is due: an ISO date and time with an offset." });
 
 export const OperatorTaskAction = TrimmedNonEmptyString.check(
   Schema.isMaxLength(OPERATOR_TASK_ACTION_MAX_LENGTH),
@@ -49,7 +66,7 @@ export const OperatorTask = Schema.Struct({
   createdByThreadId: Schema.NullOr(ThreadId),
   action: OperatorTaskAction,
   instructions: OperatorTaskInstructions,
-  dueAt: Schema.NullOr(IsoDateTime),
+  dueAt: Schema.NullOr(OperatorTaskDueAt),
   state: OperatorTaskState,
   closeReason: Schema.NullOr(OperatorTaskCloseReason),
   doneAt: Schema.NullOr(IsoDateTime),
@@ -63,3 +80,39 @@ export type OperatorTask = typeof OperatorTask.Type;
 export function operatorTaskDoneMessage(task: Pick<OperatorTask, "action">): string {
   return `The operator marked this task done: ${task.action}`;
 }
+
+/** An item with what a list needs from its thread: where it waits, and whether that thread is archived. */
+export const OperatorTaskEntry = Schema.Struct({
+  ...OperatorTask.fields,
+  projectId: ProjectId,
+  threadTitle: Schema.String,
+  threadArchived: Schema.Boolean,
+});
+export type OperatorTaskEntry = typeof OperatorTaskEntry.Type;
+
+export const OperatorTaskListInput = Schema.Struct({
+  state: Schema.optional(OperatorTaskState),
+  projectId: Schema.optional(ProjectId),
+  threadId: Schema.optional(ThreadId),
+});
+export type OperatorTaskListInput = typeof OperatorTaskListInput.Type;
+
+/** Open items, and finished ones from the last seven days. Deleted threads have none. */
+export const OperatorTaskListResult = Schema.Struct({ tasks: Schema.Array(OperatorTaskEntry) });
+export type OperatorTaskListResult = typeof OperatorTaskListResult.Type;
+
+/** Each click sends a new command id; a retry of the same click sends the same one. */
+export const OperatorTaskActionInput = Schema.Struct({
+  commandId: CommandId,
+  threadId: ThreadId,
+  taskId: OperatorTaskId,
+});
+export type OperatorTaskActionInput = typeof OperatorTaskActionInput.Type;
+
+export class OperatorTaskError extends Schema.TaggedError<OperatorTaskError>()(
+  "OperatorTaskError",
+  {
+    message: Schema.String,
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}

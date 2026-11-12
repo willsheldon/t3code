@@ -230,6 +230,7 @@ export const make = Effect.gen(function* () {
       vcsBranchStatus: true,
       inlineMessageContext: true,
       requiredWorktreeBootstrap: true,
+      operatorTasks: true,
       threadSettlement: true,
       threadAutoSettlement: true,
       storageCleanup: true,
