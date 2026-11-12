@@ -141,6 +141,7 @@ import {
   decideGuestShareCommand,
   type GuestShareCommand,
 } from "./GuestShareDecider.ts";
+import { decideOperatorTaskCommand, type OperatorTaskCommand } from "./OperatorTaskDecider.ts";
 import * as EffectOutbox from "./EffectOutbox.ts";
 import { withCommandMetrics } from "../observability/Metrics.ts";
 import type { OrchestrationEffectRequestV2, PendingOrchestrationEffectV2 } from "./EffectOutbox.ts";
@@ -592,6 +593,10 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "thread.guest-share.close":
     case "thread.guest-message.submit":
     case "thread.guest-message.dismiss":
+    case "thread.operator-task.add":
+    case "thread.operator-task.update":
+    case "thread.operator-task.done":
+    case "thread.operator-task.reopen":
     case "thread.settle":
     case "thread.auto-settle":
     case "thread.unsettle":
@@ -3466,6 +3471,70 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       payload: decided.success,
     });
     yield* releaseGuestAttachments(command, thread.guestShare, decided.success.guestShare, effects);
+  });
+
+  // The item change and the Done message commit together, so one command sends one message and a
+  // repeat finds the item already done. Same shape as `dispatchPullRequestWatchSync`.
+  const dispatchOperatorTask = Effect.fn("orchestrationV2.dispatch.operatorTask")(function* (
+    command: OperatorTaskCommand,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+    effects: Ref.Ref<Array<PendingOrchestrationEffectV2>>,
+  ) {
+    const projection = yield* projectionStore
+      .getThreadRecords(command.threadId, [])
+      .pipe(
+        Effect.mapError(
+          (cause) => new OrchestratorProjectionError({ threadId: command.threadId, cause }),
+        ),
+      );
+    const thread = projection.thread;
+    const now = yield* DateTime.now;
+    const decided =
+      thread.deletedAt !== null
+        ? Result.fail(`Thread ${command.threadId} is deleted.`)
+        : decideOperatorTaskCommand({
+            thread,
+            command,
+            now,
+            // Providers own native subagent conversations; messages cannot target them.
+            canReceiveMessage: !isProviderNativeSubagentThread(thread),
+          });
+    if (Result.isFailure(decided)) {
+      return yield* new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause: decided.failure,
+      });
+    }
+    if (decided.success.thread === thread) return;
+    yield* emit(
+      events,
+      command,
+    )({
+      type: "thread.operator-tasks-updated",
+      threadId: command.threadId,
+      providerInstanceId: thread.providerInstanceId,
+      occurredAt: now,
+      payload: decided.success.thread,
+    });
+    const wake = decided.success.wake;
+    if (wake === null) return;
+    // Emitted first so `dispatchMessage`, which reads pending events, sees the updated item.
+    yield* dispatchMessage(
+      {
+        type: "message.dispatch",
+        commandId: command.commandId,
+        threadId: command.threadId,
+        messageId: wake.messageId,
+        text: wake.text,
+        attachments: [],
+        dispatchMode: { type: "queue_after_active" },
+        createdBy: "user",
+        creationSource: "server",
+      },
+      events,
+      effects,
+    );
   });
 
   // Emitted before the message so the send and the status change commit together, and so
@@ -13803,6 +13872,12 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       case "thread.guest-message.dismiss":
         yield* dispatchGuestShare(command, events, effects);
         break;
+      case "thread.operator-task.add":
+      case "thread.operator-task.update":
+      case "thread.operator-task.done":
+      case "thread.operator-task.reopen":
+        yield* dispatchOperatorTask(command, events, effects);
+        break;
       case "provider-session.detach":
         yield* dispatchProviderSessionDetach(command, events, effects);
         break;
@@ -14154,6 +14229,10 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           command.type === "subagent.stop" ||
           // Closing a share again, or after it ended, is not an error.
           command.type === "thread.guest-share.close" ||
+          // A second Done, Reopen or close finds the item already there and sends nothing.
+          command.type === "thread.operator-task.update" ||
+          command.type === "thread.operator-task.done" ||
+          command.type === "thread.operator-task.reopen" ||
           (command.type === "thread.delete" && command.onlyIfUnused === true),
         (_planned) =>
           new OrchestratorDispatchError({

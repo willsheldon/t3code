@@ -846,6 +846,9 @@ export function applyToProjection(
         ...projection,
         thread: applyThreadPullRequestLinkUpdate(projection.thread, event.payload),
       };
+    // Operator tasks are not thread activity: the thread keeps its place in the sidebar.
+    case "thread.operator-tasks-updated":
+      return { ...projection, thread: event.payload };
     case "thread.created":
     case "thread.archived":
     case "thread.unarchived":
@@ -2075,7 +2078,8 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             case "thread.interaction-mode-updated":
             case "thread.model-selection-updated":
             case "thread.provider-switched":
-            case "thread.guest-share-updated": {
+            case "thread.guest-share-updated":
+            case "thread.operator-tasks-updated": {
               const payloadJson = yield* encodeThreadPayload(event.payload);
               const payload = parseEncodedPayload(payloadJson);
               yield* sql`
@@ -2893,7 +2897,8 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             event.type !== "thread.interaction-mode-updated" &&
             event.type !== "thread.model-selection-updated" &&
             event.type !== "thread.provider-switched" &&
-            event.type !== "thread.guest-share-updated"
+            event.type !== "thread.guest-share-updated" &&
+            event.type !== "thread.operator-tasks-updated"
           ) {
             const updatedAt = yield* encodeThreadUpdatedAt(event.occurredAt);
             yield* sql`
